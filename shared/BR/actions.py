@@ -93,3 +93,7 @@ class BRAction:
     material_tracks: list[BRMaterialTrack] = field(default_factory=list)
     loop: bool = False
     is_static: bool = False
+    # Per-bone bitmask of source HSD SRT channels. The importer may create
+    # extra constant Blender fcurves to reproduce a pose; this mask prevents
+    # those helper curves from becoming new DAT channels on round-trip.
+    source_channel_masks: dict[str, int] = field(default_factory=dict)
