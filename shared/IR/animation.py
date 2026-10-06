@@ -75,6 +75,9 @@ class IRBoneAnimationSet:
     material_tracks: list[IRMaterialTrack] = field(default_factory=list)
     loop: bool = False
     is_static: bool = False
+    # Lossless source HSD bone-animation snapshot for an untouched imported
+    # Chibi-Robo Action. None for authored/edited animation.
+    source_hsd_animation: dict | None = None
 
 
 @dataclass
