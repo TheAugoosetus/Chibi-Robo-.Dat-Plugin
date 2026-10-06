@@ -9,9 +9,11 @@ import os
 
 try:
     from .....shared.BR.armature import BRArmature, BRBone, BRBoneSpline
+    from .....shared.version import PLUGIN_VERSION
     from .animations import build_bake_skeleton, scale_baked_indices
 except (ImportError, SystemError):
     from shared.BR.armature import BRArmature, BRBone, BRBoneSpline
+    from shared.version import PLUGIN_VERSION
     from importer.phases.plan.helpers.animations import (
         build_bake_skeleton, scale_baked_indices,
     )
@@ -130,7 +132,11 @@ def plan_armature(ir_model, options=None, model_index=0):
         matrix_basis=_Y_UP_TO_Z_UP,
         bake_skeleton=bake_skeleton,
         custom_props=(
-            {"dat_game_origin": options.get("game")}
-            if options.get("game") else {}
+            {
+                "dat_game_origin": options.get("game"),
+                "dat_plugin_build": PLUGIN_VERSION,
+            }
+            if options.get("game") else
+            {"dat_plugin_build": PLUGIN_VERSION}
         ),
     )
