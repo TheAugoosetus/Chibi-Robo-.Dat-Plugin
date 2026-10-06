@@ -169,7 +169,13 @@ def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature
         per_action_scale=per_action_scale,
     )
     bake_indices = [i for i in bake_indices if i not in path_indices]
-    levels = [[i for i in lvl if i not in path_indices] for lvl in levels]
+    # Only non-empty dependency depths matter. Updating Blender after an empty
+    # depth is pure overhead, and Chibi-Robo's large action sets multiplied
+    # that overhead into tens of thousands of depsgraph evaluations.
+    levels = [
+        filtered for lvl in levels
+        if (filtered := [i for i in lvl if i not in path_indices])
+    ]
 
     name_of = {i: bake_skeleton.bones[i].name for i in bake_indices}
     pose_bone_of = {i: armature.pose.bones[name_of[i]] for i in bake_indices}
@@ -190,12 +196,12 @@ def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature
                 (raw[4].evaluate(frame), raw[5].evaluate(frame), raw[6].evaluate(frame)),
             )
         targets = bake_frame(bake_skeleton, frame_srts, bake_indices)
-        for level in levels:
+        for level_index, level in enumerate(levels):
             for idx in level:
                 pose_bone = pose_bone_of[idx]
                 pose_bone.matrix = Matrix(targets[idx])
                 # matrix_basis (and loc/rot/scale) are set synchronously by the
-                # matrix setter — read them back before the depsgraph update.
+                # matrix setter — read them back before any dependency update.
                 if frame < end_by_bone.get(idx, global_end):
                     baked = baked_by_bone[idx]
                     euler = pose_bone.rotation_euler
@@ -210,7 +216,11 @@ def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature
                     baked[7].append((frame, scale[0]))
                     baked[8].append((frame, scale[1]))
                     baked[9].append((frame, scale[2]))
-            bpy.context.view_layer.update()
+            # A depsgraph evaluation is only needed before a later depth reads
+            # a child against this freshly-posed parent chain. The final level
+            # has no dependent level after it, so updating there is wasted.
+            if level_index + 1 < len(levels):
+                bpy.context.view_layer.update()
 
     reset_pose(armature)
     armature.animation_data.action = saved_action
