@@ -20,6 +20,8 @@ class BRModel:
     meshes: list[BRMesh] = field(default_factory=list)
     mesh_instances: list[BRMeshInstance] = field(default_factory=list)
     actions: list[BRAction] = field(default_factory=list)
+    # Original DAT animation-slot -> unique Action index mapping.
+    animation_slot_map: list[int] = field(default_factory=list)
     materials: list[BRMaterial] = field(default_factory=list)
     constraints: BRConstraints = field(default_factory=BRConstraints)
     particles: BRParticleSummary | None = None
