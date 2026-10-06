@@ -1,4 +1,5 @@
 """Export pipeline entry point."""
+import time
 try:
     from ..shared.helpers.logger import StubLogger
 except (ImportError, SystemError):
@@ -61,8 +62,12 @@ class Exporter:
         if options is None:
             options = {}
 
+        pipeline_start = time.perf_counter()
+
         # Pre-process — Validate output path and scene
+        t = time.perf_counter()
         pre_process(context, filepath, options, logger)
+        logger.info("Timing: pre-process %.3fs", time.perf_counter() - t)
 
         # Bare .dat output never carries the bound_box section — it's only
         # used by PKX-wrapped models for in-game collision/culling. .fsys
@@ -74,29 +79,40 @@ class Exporter:
             options['include_bound_box'] = False
 
         # Phase 1 — Describe Blender Scene: Blender context → BRScene
+        t = time.perf_counter()
         br_scene, shiny_params, pkx_header = describe_scene(
             context, options, logger, output_ext=output_ext,
         )
+        logger.info("Timing: describe %.3fs", time.perf_counter() - t)
 
         # Phase 2 — Plan: BRScene → IRScene
+        t = time.perf_counter()
         ir_scene = plan_scene(br_scene, options, logger)
+        logger.info("Timing: plan %.3fs", time.perf_counter() - t)
 
         # Phase 3 — Compose: IRScene → node trees
+        t = time.perf_counter()
         root_nodes, section_names = compose_scene(ir_scene, options, logger)
+        logger.info("Timing: compose %.3fs", time.perf_counter() - t)
 
         # Phase 4 — Serialize: node trees → DAT bytes
+        t = time.perf_counter()
         dat_bytes = serialize(root_nodes, section_names, logger)
+        logger.info("Timing: serialize %.3fs", time.perf_counter() - t)
 
         # Phase 5 — Package: DAT bytes → final output
+        t = time.perf_counter()
         final_bytes = package_output(dat_bytes, filepath, options, logger,
                                      shiny_params=shiny_params,
                                      pkx_header=pkx_header)
+        logger.info("Timing: package %.3fs", time.perf_counter() - t)
 
         # Write to disk
         with open(filepath, 'wb') as f:
             f.write(final_bytes)
 
         logger.info("Exported %d bytes to %s", len(final_bytes), filepath)
+        logger.info("Timing: total export %.3fs", time.perf_counter() - pipeline_start)
         logger.close()
 
         return {'FINISHED'}
