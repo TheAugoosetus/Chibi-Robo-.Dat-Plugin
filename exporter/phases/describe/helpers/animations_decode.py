@@ -446,10 +446,15 @@ def _read_pristine_source_hsd_animation(action):
                         "frac_slope": int(frame.get("frac_slope", 0)),
                         "raw_ad": base64.b64decode(frame.get("raw_ad", "")),
                     })
+                if bool(anim.get("has_joint_target", False)):
+                    # PATH/targeted AObjs need a reconstructed Joint pointer.
+                    # Until that mapping is stored, use the editable rebuild
+                    # path rather than emitting a stale/null target.
+                    return None
                 out_entry["animation"] = {
                     "flags": int(anim.get("flags", 0)),
                     "end_frame": float(anim.get("end_frame", 0.0)),
-                    "has_joint_target": bool(anim.get("has_joint_target", False)),
+                    "has_joint_target": False,
                     "frames": frames,
                 }
             bones.append(out_entry)
