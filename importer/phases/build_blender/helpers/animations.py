@@ -8,14 +8,17 @@ and writes the resulting shear-free loc/rot/scale basis back as F-curves.
 """
 import math
 import json
+import base64
 import bpy
 from mathutils import Matrix, Vector
 
 try:
     from .....shared.helpers.logger import StubLogger
+    from .....shared.helpers.blender_fingerprint import pose_action_fingerprint
     from ...plan.helpers.animations import bake_frame, compute_bake_plan
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import pose_action_fingerprint
     from importer.phases.plan.helpers.animations import bake_frame, compute_bake_plan
 
 
@@ -77,6 +80,10 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
         if br_action.source_channel_masks:
             action["dat_hsd_channel_masks"] = json.dumps(
                 br_action.source_channel_masks, separators=(',', ':'))
+        if br_action.source_hsd_animation:
+            action["dat_hsd_source_animation"] = _encode_source_hsd_animation(
+                br_action.source_hsd_animation)
+            action["dat_hsd_source_pose_fingerprint"] = pose_action_fingerprint(action)
         actions.append(action)
         logger.info("  Action '%s': %d bone fcurves, %d material fcurves",
                     action.name, len(action.fcurves), mat_fcurve_count)
@@ -84,6 +91,39 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
         bpy.ops.object.mode_set(mode='OBJECT')
 
     return actions, mat_slot_indices
+
+
+def _encode_source_hsd_animation(snapshot):
+    """Encode the raw-byte animation snapshot into a Blender ID-property string."""
+    out = {"bones": []}
+    for entry in snapshot.get("bones", []):
+        if entry is None:
+            out["bones"].append(None)
+            continue
+        encoded_entry = {
+            "aj_flags": int(entry.get("aj_flags", 0)),
+            "animation": None,
+        }
+        anim = entry.get("animation")
+        if anim is not None:
+            encoded_entry["animation"] = {
+                "flags": int(anim.get("flags", 0)),
+                "end_frame": float(anim.get("end_frame", 0.0)),
+                "has_joint_target": bool(anim.get("has_joint_target", False)),
+                "frames": [
+                    {
+                        "type": int(frame.get("type", 0)),
+                        "start_frame": float(frame.get("start_frame", 0.0)),
+                        "frac_value": int(frame.get("frac_value", 0)),
+                        "frac_slope": int(frame.get("frac_slope", 0)),
+                        "raw_ad": base64.b64encode(
+                            bytes(frame.get("raw_ad", b""))).decode("ascii"),
+                    }
+                    for frame in anim.get("frames", [])
+                ],
+            }
+        out["bones"].append(encoded_entry)
+    return json.dumps(out, separators=(',', ':'))
 
 
 def reset_pose(armature):
