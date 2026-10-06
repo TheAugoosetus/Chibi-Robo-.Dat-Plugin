@@ -938,7 +938,11 @@ if __name__ == "__main__" or True:
         if limited:
             print("  Limited %d vertex weights on '%s'" % (limited, arm.name))
 
-        holders = reparent_meshes_to_holder_bones(arm)
+        if arm.get("dat_game_origin") == "CHIBI_ROBO":
+            holders = 0
+            print("  Chibi-Robo source: preserved stock rigid JOBJ ownership (holder-bone step skipped)")
+        else:
+            holders = reparent_meshes_to_holder_bones(arm)
         if holders:
             print("  Inserted %d mesh-holder bone(s) on '%s'" % (holders, arm.name))
 
