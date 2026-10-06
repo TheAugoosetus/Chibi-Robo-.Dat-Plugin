@@ -97,3 +97,5 @@ class BRAction:
     # extra constant Blender fcurves to reproduce a pose; this mask prevents
     # those helper curves from becoming new DAT channels on round-trip.
     source_channel_masks: dict[str, int] = field(default_factory=dict)
+    # Parsed HSD FObj/AObj payload retained for lossless untouched round-trip.
+    source_hsd_animation: dict | None = None
