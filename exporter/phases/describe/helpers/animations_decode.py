@@ -13,6 +13,7 @@ pass can faithfully serialise pose fcurves into ``BRBoneTrack`` and
 """
 import math
 import re
+import json
 import bpy
 from mathutils import Matrix, Vector, Euler, Quaternion
 
@@ -191,6 +192,17 @@ def describe_bone_animations(armature, bones, logger=StubLogger(), use_bezier=Tr
 
 
 def _collect_slot_ordered_action_names(armature):
+    # Chibi-Robo stores the unique imported Action order explicitly because
+    # the original DAT animation table may contain many aliases to one root.
+    raw_chibi_order = armature.get("dat_hsd_animation_action_names")
+    if isinstance(raw_chibi_order, str) and raw_chibi_order:
+        try:
+            names = json.loads(raw_chibi_order)
+            if isinstance(names, list) and all(isinstance(n, str) for n in names):
+                return names
+        except (ValueError, TypeError):
+            pass
+
     if armature.get("dat_pkx_format") is None:
         return None
 
@@ -292,6 +304,7 @@ def _bone_fcurves_frame_range(bone_fcurves):
 def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_bezier=True,
                      bone_rotation_modes=None):
     bone_rotation_modes = bone_rotation_modes or {}
+    source_channel_masks = _read_source_channel_masks(action)
     bone_fcurves = {}
     for fc in action.fcurves:
         match = re.match(r'pose\.bones\["(.+?)"\]\.(.+)', fc.data_path)
@@ -316,6 +329,12 @@ def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_b
 
     tracks = []
     for bone_name, channels in bone_fcurves.items():
+        # Imported HSD actions can contain extra Blender-only pose curves
+        # produced by the bake. If source metadata exists, bones absent from
+        # that metadata had no source Animation node and must not be exported.
+        if source_channel_masks is not None and bone_name not in source_channel_masks:
+            continue
+
         bone_idx = bone_name_to_index.get(bone_name)
         if bone_idx is None:
             continue
@@ -323,7 +342,11 @@ def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_b
         track = _unbake_bone_track(
             bone_name, bone_idx, channels, bone_data, bones,
             frame_start, frame_end, end_frame, logger, use_bezier,
-            bone_rotation_modes.get(bone_name, 'XYZ'))
+            bone_rotation_modes.get(bone_name, 'XYZ'),
+            source_channel_mask=(
+                source_channel_masks.get(bone_name)
+                if source_channel_masks is not None else None
+            ))
         if track is not None:
             tracks.append(track)
 
@@ -343,6 +366,27 @@ def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_b
     return anim_set
 
 
+def _read_source_channel_masks(action):
+    """Return imported HSD per-bone channel masks, or None for authored Actions."""
+    raw = action.get("dat_hsd_channel_masks")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    out = {}
+    for name, mask in parsed.items():
+        if isinstance(name, str):
+            try:
+                out[name] = int(mask)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def _prefer_quaternion_rotation(rotation_mode, has_quat_fcurves, has_euler_fcurves):
     """Decide whether to read a bone's rotation from its quaternion fcurves.
 
@@ -360,7 +404,7 @@ def _prefer_quaternion_rotation(rotation_mode, has_quat_fcurves, has_euler_fcurv
 
 def _unbake_bone_track(bone_name, bone_idx, channels, bone_data, bones,
                        frame_start, frame_end, end_frame, logger, use_bezier=True,
-                       rotation_mode='XYZ'):
+                       rotation_mode='XYZ', source_channel_mask=None):
     bd = bone_data[bone_idx]
     parent_idx = bd['parent_index']
     use_legacy = bd['use_legacy']
@@ -450,6 +494,18 @@ def _unbake_bone_track(bone_name, bone_idx, channels, bone_data, bones,
         rotation = [_sparsify(ch) for ch in rot_channels]
         location = [_sparsify(ch) for ch in loc_channels]
         scale = [_sparsify(ch) for ch in scl_channels]
+
+    if source_channel_mask is not None:
+        # Bits 0..2 = rotation XYZ, 3..5 = location XYZ, 6..8 = scale XYZ.
+        # Drop constant helper channels that Blender needed for pose baking but
+        # which did not exist in the source HSD Animation.
+        for axis in range(3):
+            if not (source_channel_mask & (1 << axis)):
+                rotation[axis] = []
+            if not (source_channel_mask & (1 << (3 + axis))):
+                location[axis] = []
+            if not (source_channel_mask & (1 << (6 + axis))):
+                scale[axis] = []
 
     return IRBoneTrack(
         bone_name=bone_name,
