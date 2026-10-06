@@ -4,6 +4,8 @@ Pure executor. All decisions (inherit_scale, shader graphs, animation
 basis formula, coord conversions, FOV→lens, ...) are baked into BR by
 the Plan phase. This layer only calls bpy APIs.
 """
+import json
+
 from .helpers.skeleton import build_skeleton
 from .helpers.meshes import build_meshes
 from .helpers.animations import build_bone_animations, reset_pose
@@ -53,6 +55,12 @@ def build_blender_scene(br_scene, context, options, logger=StubLogger()):
                 br_model.armature.bake_skeleton, logger=logger,
                 material_lookup=material_lookup,
             )
+
+        if br_model.animation_slot_map and actions:
+            armature["dat_hsd_animation_slot_map"] = json.dumps(
+                list(br_model.animation_slot_map), separators=(',', ':'))
+            armature["dat_hsd_animation_action_names"] = json.dumps(
+                [a.name for a in actions], separators=(',', ':'))
 
         build_constraints(br_model.constraints, armature, logger)
         build_particles(br_model.particles, armature, context, logger=logger)
