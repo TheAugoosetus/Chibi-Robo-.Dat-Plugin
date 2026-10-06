@@ -57,7 +57,11 @@ def plan_meshes(br_meshes, br_materials, ir_bones, logger=StubLogger(),
 
     ir_meshes = []
     for br_mesh in br_meshes:
-        bone_weights = _pack_bone_weights(br_mesh.vertex_groups)
+        bone_weights = _pack_bone_weights(
+            br_mesh.vertex_groups,
+            source_skin_type=getattr(br_mesh, 'source_skin_type', None),
+            parent_bone_name=br_mesh.parent_bone_name,
+        )
         parent_bone_index = _resolve_parent_bone_index(
             br_mesh.parent_bone_name, br_mesh.vertex_groups,
             bone_name_to_index, ir_bones,
@@ -93,14 +97,23 @@ def plan_meshes(br_meshes, br_materials, ir_bones, logger=StubLogger(),
     return ir_meshes
 
 
-def _pack_bone_weights(vertex_groups):
-    """Invert BRVertexGroup (per-bone) into IRBoneWeights (per-vertex).
+def _pack_bone_weights(vertex_groups, source_skin_type=None,
+                       parent_bone_name=None):
+    """Invert BRVertexGroup while preserving imported HSD skin semantics.
 
-    Always emits SkinType.WEIGHTED — POBJ_SKIN/SINGLE_BONE is unused
-    across the surveyed game models, and we can't safely re-classify a
-    single-bone-weight=1.0 envelope mesh into rigid skin from a Blender
-    scene alone.
+    Blender represents RIGID/SINGLE_BONE attachments using ordinary vertex
+    groups, so source metadata is required to distinguish them from envelopes.
     """
+    if source_skin_type in (SkinType.RIGID.value, SkinType.SINGLE_BONE.value):
+        bone_name = parent_bone_name
+        if not bone_name and len(vertex_groups) == 1:
+            bone_name = vertex_groups[0].name
+        if bone_name:
+            return IRBoneWeights(
+                type=SkinType(source_skin_type),
+                bone_name=bone_name,
+            )
+
     if not vertex_groups:
         return None
 
