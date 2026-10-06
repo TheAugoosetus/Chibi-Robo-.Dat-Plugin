@@ -92,6 +92,9 @@ def plan_meshes(ir_model):
             is_hidden=ir_mesh.is_hidden,
             shape_keys=list(ir_mesh.shape_keys) if ir_mesh.shape_keys else [],
             material_index=material_index,
+            source_skin_type=(
+                ir_mesh.bone_weights.type.value if ir_mesh.bone_weights else None
+            ),
         ))
 
     br_instances = plan_mesh_instances(ir_model)
