@@ -234,6 +234,7 @@ def describe_bones(root_joint, options=None, logger=None):
             scale_correction=matrix_to_list(record['scale_correction']),
             accumulated_scale=record['accumulated_scale'],
             spline=_describe_joint_spline(joint),
+            source_hsd_flags=joint.flags,
         )
         bones.append(bone)
 
