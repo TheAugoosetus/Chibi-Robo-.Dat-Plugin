@@ -105,6 +105,7 @@ def _plan_one_model(br_model, logger, merge=True, image_cache=None):
         bones=ir_bones,
         meshes=ir_meshes,
         bone_animations=bone_animations,
+        animation_slot_map=list(getattr(br_model, 'animation_slot_map', None) or []),
         ik_constraints=ik,
         copy_location_constraints=cl,
         track_to_constraints=tt,
