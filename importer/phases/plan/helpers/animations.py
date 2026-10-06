@@ -86,7 +86,21 @@ def _plan_single_action(anim_set):
         material_tracks=material_tracks,
         loop=anim_set.loop,
         is_static=anim_set.is_static,
+        source_channel_masks={
+            t.bone_name: _source_channel_mask(t)
+            for t in anim_set.tracks
+        },
     )
+
+
+def _source_channel_mask(track):
+    """Bitmask of SRT axes that existed in the source HSD Animation."""
+    mask = 0
+    for group, channels in enumerate((track.rotation, track.location, track.scale)):
+        for axis, keyframes in enumerate(channels):
+            if keyframes:
+                mask |= 1 << (group * 3 + axis)
+    return mask
 
 
 def _plan_bone_track(ir_track):
