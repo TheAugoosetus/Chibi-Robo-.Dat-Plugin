@@ -61,6 +61,11 @@ def build_blender_scene(br_scene, context, options, logger=StubLogger()):
                 list(br_model.animation_slot_map), separators=(',', ':'))
             armature["dat_hsd_animation_action_names"] = json.dumps(
                 [a.name for a in actions], separators=(',', ':'))
+            armature["dat_hsd_animation_slot_count"] = len(br_model.animation_slot_map)
+            armature["dat_hsd_animation_unique_count"] = len(actions)
+            logger.info(
+                "  Chibi animation slot map: %d DAT slot(s) -> %d unique Blender Action(s)",
+                len(br_model.animation_slot_map), len(actions))
 
         build_constraints(br_model.constraints, armature, logger)
         build_particles(br_model.particles, armature, context, logger=logger)
