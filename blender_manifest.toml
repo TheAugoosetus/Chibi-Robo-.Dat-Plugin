@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
-id = "gamecube_dat_model"
-version = "3.1.0"
-name = "Gamecube Dat Model"
-tagline = "Import-Export Gamecube .dat models"
+id = "chibi_robo_dat_model"
+version = "3.1.0-chibi.1"
+name = "Chibi-Robo DAT Model"
+tagline = "Import/export Chibi-Robo GameCube .dat models"
 maintainer = "Made, StarsMmd, MikeyX"
 type = "add-on"
 
