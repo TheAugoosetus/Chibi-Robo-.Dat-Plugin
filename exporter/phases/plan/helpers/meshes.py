@@ -90,6 +90,9 @@ def plan_meshes(br_meshes, br_materials, ir_bones, logger=StubLogger(),
             parent_bone_index=parent_bone_index,
             cull_front=getattr(br_mesh, '_cull_front', False),
             cull_back=getattr(br_mesh, '_cull_back', False),
+            source_vertex_formats=[
+                dict(fmt) for fmt in getattr(br_mesh, 'source_vertex_formats', [])
+            ],
             id=br_mesh.id,
         ))
 
