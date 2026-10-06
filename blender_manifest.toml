@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "chibi_robo_dat_model"
-version = "3.1.4"
+version = "3.1.5"
 name = "Chibi-Robo DAT Model"
 tagline = "Import/export Chibi-Robo GameCube .dat models"
 maintainer = "Made, StarsMmd, MikeyX"
