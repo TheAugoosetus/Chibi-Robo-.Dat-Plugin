@@ -15,6 +15,7 @@ except (ImportError, SystemError):
 GAME_COLO_XD = 'COLO_XD'
 GAME_KIRBY_AIR_RIDE = 'KIRBY_AIR_RIDE'
 GAME_SMASH_BROS = 'SMASH_BROS'
+GAME_CHIBI_ROBO = 'CHIBI_ROBO'
 GAME_OTHER = 'OTHER'
 
 # Colosseum / XD — the only public sections the runtime ever routes are
@@ -79,10 +80,19 @@ _RULES_KIRBY_AIR_RIDE = [
 # analysis lands.
 _RULES_SMASH_BROS = list(_RULES_OTHER)
 
+# Chibi-Robo! NTSC-U qp.bin corpus: all 1,086 surveyed DAT archives expose a
+# single public root named scene_data. Keep the routing deliberately strict so
+# malformed/non-PIA files fail loudly instead of being guessed as another HSD
+# root type.
+_RULES_CHIBI_ROBO = [
+    ('exact', 'scene_data', 'SceneData'),
+]
+
 _RULES_BY_GAME = {
     GAME_COLO_XD: _RULES_COLO_XD,
     GAME_KIRBY_AIR_RIDE: _RULES_KIRBY_AIR_RIDE,
     GAME_SMASH_BROS: _RULES_SMASH_BROS,
+    GAME_CHIBI_ROBO: _RULES_CHIBI_ROBO,
     GAME_OTHER: _RULES_OTHER,
 }
 
