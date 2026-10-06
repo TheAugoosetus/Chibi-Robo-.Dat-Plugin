@@ -348,8 +348,23 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     # (V goes down). Flip V when encoding to GX vertex buffers.
     for uv_i, uv_layer in enumerate(ir_mesh.uv_layers):
         flipped_uvs = [(u, 1.0 - v) for u, v in uv_layer.uvs]
-        uv_verts, uv_indices, uv_buffer = _encode_indexed_float2(flipped_uvs)
-        uv_desc = _make_vertex_desc(GX_VA_TEX0 + uv_i, GX_TEX_ST, GX_F32, stride=8)
+        uv_attr = GX_VA_TEX0 + uv_i
+        uv_fmt = _source_vertex_format(ir_mesh, uv_attr)
+        uv_encoded = _encode_indexed_source_numeric(
+            flipped_uvs, uv_fmt, expected_components=2)
+        if uv_encoded is not None:
+            uv_verts, uv_indices, uv_buffer = uv_encoded
+            uv_desc = _make_vertex_desc_from_source(
+                uv_attr, uv_fmt, len(uv_verts),
+                GX_TEX_ST, GX_F32, 8)
+        else:
+            if uv_fmt is not None:
+                logger.warning(
+                    "      pobj '%s': edited UV%d no longer fits source GX "
+                    "format; falling back to F32", ir_mesh.name, uv_i)
+            uv_verts, uv_indices, uv_buffer = _encode_indexed_float2(flipped_uvs)
+            uv_desc = _make_vertex_desc(
+                uv_attr, GX_TEX_ST, GX_F32, stride=8)
         uv_desc.raw_vertex_data = uv_buffer
         vertex_descs.append(uv_desc)
         vertex_buffers.append(('uv', uv_verts, uv_indices))
