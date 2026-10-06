@@ -123,12 +123,25 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
 
     for i, bone in enumerate(bones):
         source_flags = getattr(bone, 'source_hsd_flags', None)
-        flags = int(source_flags) if source_flags is not None else 0
-        # Recompute topology-dependent bits, but retain source HSD state that
-        # Blender cannot represent (including TEXGEN, SPECULAR and billboard).
-        flags &= ~structurally_derived_mask
-        if source_flags is None:
-            flags &= ~(draw_pass_mask | root_draw_pass_mask)
+
+        # Imported DAT joints already carry the renderer's authoritative HSD
+        # flags. Preserve them verbatim for lossless Chibi-Robo round-trips;
+        # only the Blender-visible hidden toggle is allowed to update here.
+        # New Blender-authored joints (source_flags is None) still use the
+        # generic topology-derived rules below.
+        if source_flags is not None:
+            flags = int(source_flags)
+            if bone.is_hidden:
+                flags |= JOBJ_HIDDEN
+            else:
+                flags &= ~JOBJ_HIDDEN
+            bone.flags = flags
+            if not (flags & JOBJ_SKELETON):
+                bone.inverse_bind_matrix = None
+            continue
+
+        flags = 0
+        flags &= ~(draw_pass_mask | root_draw_pass_mask)
 
         if bone.parent_index is None:
             flags |= JOBJ_SKELETON_ROOT
