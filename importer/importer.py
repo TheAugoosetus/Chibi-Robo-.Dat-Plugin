@@ -43,7 +43,7 @@ class Importer:
         except ValueError as error:
             logger.error("Phase 1 rejected %s: %s", filename, error)
             logger.info("Timing: total import %.3fs", time.perf_counter() - pipeline_start)
-        logger.info("Log file: %s", logger.log_path)
+            logger.info("Log file: %s", logger.log_path)
             logger.close()
             raise ModelBuildError(filename, ValueError(
                 "No model data found in %s: %s" % (filename, error)
@@ -154,6 +154,7 @@ class Importer:
                 logger.error("Failed to import %s: %s", metadata.filename, error)
                 errors.append((metadata.filename, error))
 
+        logger.info("Timing: total import %.3fs", time.perf_counter() - pipeline_start)
         logger.info("Log file: %s", logger.log_path)
         logger.close()
 
