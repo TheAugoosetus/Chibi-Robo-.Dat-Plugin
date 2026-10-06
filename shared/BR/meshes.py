@@ -44,6 +44,9 @@ class BRMesh:
     # Index into BRModel.materials, or None for a placeholder material.
     # Build phase resolves: identical material_index → same bpy material.
     material_index: int | None = None
+    # Original HSD skin mode when imported. Blender vertex groups alone cannot
+    # distinguish a rigid attachment from a one-bone weighted envelope.
+    source_skin_type: str | None = None
 
 
 @dataclass
