@@ -14,8 +14,8 @@ The script operates on all objects in the scene — no selection required:
      walk down the bone chain.
   2. Stamps a default `dat_camera_aspect` on any scene camera missing one
      (camera creation lives in scripts/add_debug_camera.py)
-  3. Limits vertex bone weights to MAX_WEIGHTS_PER_VERTEX per vertex (GameCube hardware
-     constraint) and quantises to 10% steps
+  3. Limits genuine envelope weights to MAX_WEIGHTS_PER_VERTEX and quantises
+     them to 10% steps. Imported Chibi-Robo rigid attachments are preserved.
   4. Culls unused material slots so EEVEE doesn't compile materials no
      polygon references
   5. Downscales textures larger than 512×512 proportionally
@@ -443,6 +443,32 @@ def normalize_camera_aspect():
 
 
 # ---------------------------------------------------------------------------
+# Chibi-Robo source-preservation helpers
+# ---------------------------------------------------------------------------
+
+def _source_skin_type(mesh_obj):
+    """Return the HSD skin semantic preserved by the Chibi-Robo importer."""
+    value = mesh_obj.get("dat_hsd_skin_type")
+    return str(value) if value is not None else None
+
+
+def _is_source_rigid_mesh(mesh_obj):
+    """True when a Blender vertex group represents HSD ownership, not weights.
+
+    Chibi-Robo's stock corpus overwhelmingly uses rigid PObjects. The importer
+    creates a full-weight Blender vertex group so that the mesh follows its
+    owner bone in Blender, but that group must not be normalized, quantized,
+    or treated as an envelope deformer during export preparation.
+    """
+    return _source_skin_type(mesh_obj) in ("RIGID", "SINGLE_BONE")
+
+
+def _is_imported_chibi_armature(armature):
+    """True for an armature imported through the Chibi-Robo profile."""
+    return armature.get("dat_game_origin") == "CHIBI_ROBO"
+
+
+# ---------------------------------------------------------------------------
 # Holder-bone insertion for mesh-owner ↔ deformer disjointness
 # ---------------------------------------------------------------------------
 # Game-native models keep two joint roles strictly disjoint: a *mesh-owner*
@@ -515,8 +541,7 @@ def reparent_meshes_to_holder_bones(armature):
         # Imported HSD rigid/single-bound meshes carry vertex groups in
         # Blender, but those groups do not mean POBJ_ENVELOPE. Only genuine
         # weighted meshes participate in the owner/deformer disjoint rule.
-        source_skin = m.get("dat_hsd_skin_type")
-        if source_skin not in ("RIGID", "SINGLE_BONE"):
+        if not _is_source_rigid_mesh(m):
             deformers |= weighted
 
     def owner_of(m):
@@ -609,9 +634,12 @@ def reparent_meshes_to_holder_bones(armature):
 # ---------------------------------------------------------------------------
 
 def prepare_mesh_weights(armature):
-    """Limit per-vertex bone influences to MAX_WEIGHTS_PER_VERTEX and
-    quantise weights to WEIGHT_QUANTISATION_STEP increments (matching
-    game-model precision).
+    """Prepare genuine envelope weights for export.
+
+    Imported Chibi-Robo RIGID/SINGLE_BONE meshes are deliberately skipped:
+    their Blender vertex groups are attachment metadata, not POBJ_ENVELOPE
+    weights. Newly authored or genuinely weighted meshes still receive the
+    influence cap, normalization and quantization below.
 
     Returns (weights_limited, 0) — the second value is reserved for the
     rigid-split count that the PKX prep script reports.
@@ -623,6 +651,11 @@ def prepare_mesh_weights(armature):
     total_limited = 0
 
     for mesh_obj in meshes:
+        if _is_source_rigid_mesh(mesh_obj):
+            # This group is an HSD rigid-owner bridge, not envelope skinning.
+            # Leave the exact 1.0 attachment untouched.
+            continue
+
         bpy.ops.object.select_all(action='DESELECT')
         mesh_obj.select_set(True)
         bpy.context.view_layer.objects.active = mesh_obj
@@ -940,6 +973,16 @@ if __name__ == "__main__" or True:
         print("  No armatures in scene (weight / texture steps skipped)")
 
     for arm in armatures:
+        if _is_imported_chibi_armature(arm):
+            rigid_count = sum(
+                1 for obj in bpy.data.objects
+                if obj.parent is arm and obj.type == 'MESH'
+                and _is_source_rigid_mesh(obj)
+            )
+            if rigid_count:
+                print("  Chibi-Robo source preservation: %d rigid mesh(es) "
+                      "will keep stock ownership/weights" % rigid_count)
+
         limited, _ = prepare_mesh_weights(arm)
         if limited:
             print("  Limited %d vertex weights on '%s'" % (limited, arm.name))
