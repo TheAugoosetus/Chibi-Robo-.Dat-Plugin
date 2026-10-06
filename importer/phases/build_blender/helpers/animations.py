@@ -7,6 +7,7 @@ keyframe F-curves per frame, hands the whole chain's SRT to ``bake_frame``,
 and writes the resulting shear-free loc/rot/scale basis back as F-curves.
 """
 import math
+import json
 import bpy
 from mathutils import Matrix, Vector
 
@@ -73,6 +74,9 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
         )
 
         action.slots.active = armature_slot
+        if br_action.source_channel_masks:
+            action["dat_hsd_channel_masks"] = json.dumps(
+                br_action.source_channel_masks, separators=(',', ':'))
         actions.append(action)
         logger.info("  Action '%s': %d bone fcurves, %d material fcurves",
                     action.name, len(action.fcurves), mat_fcurve_count)
