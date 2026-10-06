@@ -28,6 +28,12 @@ def describe_armature(armature, logger=StubLogger()):
         for b in armature_data.bones
         if b.get("dat_hsd_flags") is not None
     }
+    # Bone.hide is authoritative here. EditBone.hide is not guaranteed to
+    # mirror the imported Bone visibility bit after mode switches.
+    hidden_by_name = {
+        b.name: bool(b.hide)
+        for b in armature_data.bones
+    }
 
     prev_active = bpy.context.view_layer.objects.active
     bpy.context.view_layer.objects.active = armature
@@ -55,7 +61,7 @@ def describe_armature(armature, logger=StubLogger()):
             ),
             'use_connect': b.use_connect,
             'inherit_scale': b.inherit_scale,
-            'hide': b.hide,
+            'hide': hidden_by_name.get(b.name, False),
             'source_hsd_flags': source_flags_by_name.get(b.name),
         })
 
