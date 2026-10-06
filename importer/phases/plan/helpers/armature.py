@@ -129,4 +129,8 @@ def plan_armature(ir_model, options=None, model_index=0):
         display_type='STICK' if ik_hack else 'OCTAHEDRAL',
         matrix_basis=_Y_UP_TO_Z_UP,
         bake_skeleton=bake_skeleton,
+        custom_props=(
+            {"dat_game_origin": options.get("game")}
+            if options.get("game") else {}
+        ),
     )
