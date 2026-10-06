@@ -41,7 +41,10 @@ def pre_process(context, filepath, options=None, logger=StubLogger()):
     ext, fsys_inner_kind = _validate_output_path(filepath, logger)
     _validate_scene(context, logger)
     _validate_baked_transforms(context, logger)
-    _validate_root_bone_orientation(context, logger)
+    # Chibi-Robo stock DATs legitimately use non-identity root JOBJ rotations
+    # (for example living/kaiga_j.dat). Preserve authored root transforms instead
+    # of enforcing the Pokemon-oriented identity-root convention.
+    logger.info("  Root JOBJ orientation preserved (Chibi-Robo mode)")
     _validate_vertex_weight_count(context, logger)
     _validate_mesh_owner_disjoint_from_deformers(context, logger)
     _validate_texture_sizes(context, logger)
