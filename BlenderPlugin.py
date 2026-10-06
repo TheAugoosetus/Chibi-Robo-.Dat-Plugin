@@ -35,9 +35,10 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
             ('COLO_XD', 'Colosseum / XD', 'Pokémon Colosseum and Pokémon XD: Gale of Darkness'),
             ('KIRBY_AIR_RIDE', 'Kirby Air Ride', 'Kirby Air Ride'),
             ('SMASH_BROS', 'Super Smash Bros.', 'Super Smash Bros. Melee'),
-            ('OTHER', 'Other', 'Unknown / unsupported game — falls back to Colosseum / XD routing rules'),
+            ('CHIBI_ROBO', 'Chibi-Robo!', 'Chibi-Robo! Plug Into Adventure!'),
+            ('OTHER', 'Other', 'Unknown / unsupported game — uses generic HSD routing rules'),
         ],
-        default='COLO_XD',
+        default='CHIBI_ROBO',
     )
     colo_xd_kind: EnumProperty(
         name='Colo/XD Kind',
