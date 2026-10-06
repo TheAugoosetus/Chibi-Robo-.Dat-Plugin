@@ -52,6 +52,9 @@ class IRBone:
     instance_child_bone_index: int | None = None
     # JOBJ_SPLINE curve carried as the joint's `property` (maps only)
     spline: IRBoneSpline | None = None
+    # Original JOBJ flags, when this bone came from a DAT. None means the
+    # bone was authored in Blender and export should derive flags normally.
+    source_hsd_flags: int | None = None
 
 
 @dataclass
