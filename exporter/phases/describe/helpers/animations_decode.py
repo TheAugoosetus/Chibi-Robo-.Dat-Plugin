@@ -15,6 +15,7 @@ import math
 import re
 import json
 import base64
+import binascii
 import bpy
 from mathutils import Matrix, Vector, Euler, Quaternion
 
@@ -452,7 +453,7 @@ def _read_pristine_source_hsd_animation(action):
                     "frames": frames,
                 }
             bones.append(out_entry)
-    except (TypeError, ValueError, base64.binascii.Error):
+    except (TypeError, ValueError, binascii.Error):
         return None
 
     return {
