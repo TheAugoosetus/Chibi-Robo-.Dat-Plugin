@@ -1,9 +1,9 @@
 bl_info = {
-    "name": "Gamecube Dat Model",
+    "name": "Chibi-Robo DAT Model",
     "author": "Made, StarsMmd, MikeyX",
     "blender": (4, 5, 0),
     "location": "File > Import-Export",
-    "description": "Import-Export Gamecube .dat models",
+    "description": "Import-export Chibi-Robo GameCube .dat models",
     "warning": "",
     "category": "Import-Export",
 }
