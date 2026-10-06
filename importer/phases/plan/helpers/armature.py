@@ -118,6 +118,7 @@ def plan_armature(ir_model, options=None, model_index=0):
             rotation_mode='XYZ',
             is_hidden=ir_bone.is_hidden,
             spline=_plan_bone_spline(ir_bone.spline),
+            source_hsd_flags=ir_bone.flags,
         )
         for i, ir_bone in enumerate(ir_model.bones)
     ]
