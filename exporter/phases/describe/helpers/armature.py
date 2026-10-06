@@ -23,6 +23,11 @@ def describe_armature(armature, logger=StubLogger()):
     Out: BRArmature with edit-bone matrices in Blender frame.
     """
     armature_data = armature.data
+    source_flags_by_name = {
+        b.name: b.get("dat_hsd_flags")
+        for b in armature_data.bones
+        if b.get("dat_hsd_flags") is not None
+    }
 
     prev_active = bpy.context.view_layer.objects.active
     bpy.context.view_layer.objects.active = armature
@@ -51,6 +56,7 @@ def describe_armature(armature, logger=StubLogger()):
             'use_connect': b.use_connect,
             'inherit_scale': b.inherit_scale,
             'hide': b.hide,
+            'source_hsd_flags': source_flags_by_name.get(b.name),
         })
 
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -81,6 +87,7 @@ def describe_armature(armature, logger=StubLogger()):
             use_connect=snap['use_connect'],
             is_hidden=snap['hide'],
             spline=bone_splines.get(snap['name']),
+            source_hsd_flags=snap['source_hsd_flags'],
         ))
 
     custom_props = {k: armature[k] for k in armature.keys()}
