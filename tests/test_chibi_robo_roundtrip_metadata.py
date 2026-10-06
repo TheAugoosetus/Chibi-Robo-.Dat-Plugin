@@ -74,10 +74,7 @@ def test_refine_flags_does_not_drop_chibi_render_flags():
 
     refine_bone_flags([bone], [mesh])
 
-    assert bone.flags & JOBJ_TEXGEN
-    assert bone.flags & JOBJ_SPECULAR
-    assert bone.flags & JOBJ_XLU
-    assert bone.flags & JOBJ_ROOT_XLU
+    assert bone.flags == source
 
 
 def test_rigid_source_skin_type_survives_full_weight_vertex_group():
