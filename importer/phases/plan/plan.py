@@ -47,6 +47,7 @@ def plan_scene(ir_scene, options=None, logger=StubLogger()):
             meshes=br_meshes,
             mesh_instances=br_instances,
             actions=br_actions,
+            animation_slot_map=list(getattr(ir_model, 'animation_slot_map', None) or []),
             materials=br_materials,
             constraints=plan_constraints(
                 ir_model.ik_constraints,
