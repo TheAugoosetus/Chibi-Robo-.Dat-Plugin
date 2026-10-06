@@ -14,6 +14,7 @@ pass can faithfully serialise pose fcurves into ``BRBoneTrack`` and
 import math
 import re
 import json
+import base64
 import bpy
 from mathutils import Matrix, Vector, Euler, Quaternion
 
@@ -22,6 +23,9 @@ try:
     from .....shared.IR.enums import Interpolation
     from .....shared.helpers.math_shim import compile_srt_matrix
     from .....shared.helpers.logger import StubLogger
+    from .....shared.helpers.blender_fingerprint import (
+        armature_rest_fingerprint, pose_action_fingerprint,
+    )
     from .material_animations_decode import (
         describe_material_animations_for_action,
         build_material_lookup_from_meshes,
@@ -31,6 +35,9 @@ except (ImportError, SystemError):
     from shared.IR.enums import Interpolation
     from shared.helpers.math_shim import compile_srt_matrix
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import (
+        armature_rest_fingerprint, pose_action_fingerprint,
+    )
     from exporter.phases.describe.helpers.material_animations_decode import (
         describe_material_animations_for_action,
         build_material_lookup_from_meshes,
@@ -149,6 +156,16 @@ def describe_bone_animations(armature, bones, logger=StubLogger(), use_bezier=Tr
     bone_data = _build_bone_data(bones)
     bone_name_to_index = {b.name: i for i, b in enumerate(bones)}
 
+    stored_skeleton_fp = armature.get("dat_hsd_source_skeleton_fingerprint")
+    source_skeleton_pristine = bool(
+        isinstance(stored_skeleton_fp, str)
+        and stored_skeleton_fp
+        and stored_skeleton_fp == armature_rest_fingerprint(armature)
+    )
+    if stored_skeleton_fp and not source_skeleton_pristine:
+        logger.info(
+            "  Chibi source skeleton was edited; raw HSD animation passthrough disabled")
+
     # Each pose bone exposes exactly one *active* rotation channel, chosen by
     # its rotation_mode. An Action can still carry stale fcurves for the other
     # channel (e.g. flat identity rotation_quaternion curves left behind after
@@ -163,8 +180,11 @@ def describe_bone_animations(armature, bones, logger=StubLogger(), use_bezier=Tr
 
     anim_sets = []
     for action in actions:
-        anim_set = _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_bezier,
-                                    bone_rotation_modes)
+        anim_set = _describe_action(
+            action, bones, bone_data, bone_name_to_index, logger, use_bezier,
+            bone_rotation_modes,
+            allow_source_passthrough=source_skeleton_pristine,
+        )
         if anim_set is None:
             # Count what we saw so the user can tell whether the action is
             # empty, points at unknown bones, or has its fcurves trapped in
@@ -302,8 +322,26 @@ def _bone_fcurves_frame_range(bone_fcurves):
 
 
 def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_bezier=True,
-                     bone_rotation_modes=None):
+                     bone_rotation_modes=None, allow_source_passthrough=False):
     bone_rotation_modes = bone_rotation_modes or {}
+
+    if allow_source_passthrough:
+        source = _read_pristine_source_hsd_animation(action)
+        if source is not None:
+            channel_count = sum(
+                len((entry.get("animation") or {}).get("frames", []))
+                for entry in source.get("bones", [])
+                if isinstance(entry, dict)
+            )
+            logger.info(
+                "    action '%s': reusing %d original compressed HSD FObj channel(s)",
+                action.name, channel_count)
+            return IRBoneAnimationSet(
+                name=action.name,
+                tracks=[],
+                loop=bool(source.get("loop", False)),
+                source_hsd_animation=source,
+            )
     source_channel_masks = _read_source_channel_masks(action)
     bone_fcurves = {}
     for fc in action.fcurves:
@@ -364,6 +402,63 @@ def _describe_action(action, bones, bone_data, bone_name_to_index, logger, use_b
     logger.debug("    action '%s': %d tracks, %d frames, loop=%s",
                  action.name, len(tracks), end_frame, is_loop)
     return anim_set
+
+
+def _read_pristine_source_hsd_animation(action):
+    """Return decoded raw HSD animation metadata when the pose Action is unchanged."""
+    raw = action.get("dat_hsd_source_animation")
+    baseline = action.get("dat_hsd_source_pose_fingerprint")
+    if not isinstance(raw, str) or not raw:
+        return None
+    if not isinstance(baseline, str) or not baseline:
+        return None
+    if pose_action_fingerprint(action) != baseline:
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("bones"), list):
+        return None
+
+    bones = []
+    try:
+        for entry in parsed["bones"]:
+            if entry is None:
+                bones.append(None)
+                continue
+            if not isinstance(entry, dict):
+                return None
+            out_entry = {
+                "aj_flags": int(entry.get("aj_flags", 0)),
+                "animation": None,
+            }
+            anim = entry.get("animation")
+            if anim is not None:
+                frames = []
+                for frame in anim.get("frames", []):
+                    frames.append({
+                        "type": int(frame.get("type", 0)),
+                        "start_frame": float(frame.get("start_frame", 0.0)),
+                        "frac_value": int(frame.get("frac_value", 0)),
+                        "frac_slope": int(frame.get("frac_slope", 0)),
+                        "raw_ad": base64.b64decode(frame.get("raw_ad", "")),
+                    })
+                out_entry["animation"] = {
+                    "flags": int(anim.get("flags", 0)),
+                    "end_frame": float(anim.get("end_frame", 0.0)),
+                    "has_joint_target": bool(anim.get("has_joint_target", False)),
+                    "frames": frames,
+                }
+            bones.append(out_entry)
+    except (TypeError, ValueError, base64.binascii.Error):
+        return None
+
+    return {
+        "bones": bones,
+        "loop": bool(parsed.get("loop", False)),
+    }
 
 
 def _read_source_channel_masks(action):
