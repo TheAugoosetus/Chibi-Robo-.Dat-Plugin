@@ -40,6 +40,57 @@ from .helpers.cameras import describe_camera, describe_camera_animations
 from .helpers.material_animations import describe_material_animations
 
 
+def _deduplicate_chibi_animation_slots(model_set, logger=StubLogger()):
+    """Collapse repeated Chibi-Robo animation-root pointers to unique actions.
+
+    Chibi-Robo DATs can reuse the exact same AnimationJoint tree in many
+    ModelSet slots. Blender does not need duplicate Actions for aliases, and
+    rebuilding every alias is extremely expensive. For now this optimization
+    is enabled only when the model has no material/shape animation roots, so
+    a slot cannot differ solely through one of those parallel arrays.
+
+    Returns (model_set_for_decode, slot_map). slot_map maps each original DAT
+    slot to an index in the deduplicated animated_joints list.
+    """
+    roots = list(getattr(model_set, 'animated_joints', None) or [])
+    if not roots:
+        return model_set, []
+
+    mat_roots = list(getattr(model_set, 'animated_material_joints', None) or [])
+    shape_roots = list(getattr(model_set, 'animated_shape_joints', None) or [])
+    if any(r is not None for r in mat_roots) or any(r is not None for r in shape_roots):
+        logger.info("  Chibi animation alias collapse skipped: parallel material/shape animation roots present")
+        return model_set, []
+
+    unique_roots = []
+    slot_map = []
+    key_to_index = {}
+    for root in roots:
+        key = getattr(root, 'address', None)
+        if key is None:
+            key = id(root)
+        idx = key_to_index.get(key)
+        if idx is None:
+            idx = len(unique_roots)
+            key_to_index[key] = idx
+            unique_roots.append(root)
+        slot_map.append(idx)
+
+    if len(unique_roots) == len(roots):
+        return model_set, slot_map
+
+    dedup = type('ChibiDedupModelSet', (), {
+        'root_joint': model_set.root_joint,
+        'animated_joints': unique_roots,
+        'animated_material_joints': [],
+        'animated_shape_joints': [],
+    })()
+
+    logger.info("  Chibi animation aliases: %d slot(s) -> %d unique root(s)",
+                len(roots), len(unique_roots))
+    return dedup, slot_map
+
+
 def describe_scene(sections, options, logger=StubLogger()):
     """Convert parsed node tree sections into a fully populated IRScene.
 
@@ -160,8 +211,18 @@ def describe_scene(sections, options, logger=StubLogger()):
         logger.info("  Bones: %d (%.3fs)", len(bones), time.time() - t1)
 
         t3 = time.time()
-        bone_anims = describe_bone_animations(model_set, joint_to_bone_index, bones, options, logger, model_name=model_name)
-        logger.info("  Animations: %d sets (%.3fs)", len(bone_anims), time.time() - t3)
+        anim_model_set = model_set
+        animation_slot_map = []
+        if options.get("game") == "CHIBI_ROBO":
+            anim_model_set, animation_slot_map = _deduplicate_chibi_animation_slots(
+                model_set, logger)
+        bone_anims = describe_bone_animations(
+            anim_model_set, joint_to_bone_index, bones, options, logger,
+            model_name=model_name)
+        logger.info("  Animations: %d unique set(s), %d slot(s) (%.3fs)",
+                    len(bone_anims),
+                    len(animation_slot_map) if animation_slot_map else len(bone_anims),
+                    time.time() - t3)
 
         # Rebind near-zero-rest bones *before* mesh vertices get baked into
         # world space. describe_meshes transforms bone-local vertices via
@@ -214,7 +275,7 @@ def describe_scene(sections, options, logger=StubLogger()):
         logger.info("  Constraints: %d (%.3fs)", total_c, time.time() - t4)
 
         t5 = time.time()
-        mat_anims = describe_material_animations(model_set, joint_to_bone_index, bones, options, logger, model_name=model_name, total_meshes=len(meshes))
+        mat_anims = describe_material_animations(anim_model_set, joint_to_bone_index, bones, options, logger, model_name=model_name, total_meshes=len(meshes))
         logger.info("  Material animations: %d sets (%.3fs)", len(mat_anims), time.time() - t5)
 
         # Pair material animations into bone animation sets by index.
@@ -243,6 +304,7 @@ def describe_scene(sections, options, logger=StubLogger()):
             bones=bones,
             meshes=meshes,
             bone_animations=bone_anims,
+            animation_slot_map=animation_slot_map,
             ik_constraints=ik_c,
             copy_location_constraints=cl_c,
             track_to_constraints=tt_c,
