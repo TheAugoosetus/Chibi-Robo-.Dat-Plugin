@@ -56,6 +56,7 @@ def _ir_anim_set_to_br_action(ir_set):
         material_tracks=[_ir_material_track_to_br(t) for t in ir_set.material_tracks],
         loop=ir_set.loop,
         is_static=getattr(ir_set, 'is_static', False),
+        source_hsd_animation=getattr(ir_set, 'source_hsd_animation', None),
     )
 
 
