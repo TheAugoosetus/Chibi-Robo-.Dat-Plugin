@@ -47,6 +47,9 @@ class BRMesh:
     # Original HSD skin mode when imported. Blender vertex groups alone cannot
     # distinguish a rigid attachment from a one-bone weighted envelope.
     source_skin_type: str | None = None
+    # Source GX vertex descriptor metadata (JSON-safe dicts). Blender has no
+    # native concept of component_frac / S8 / S16 vertex-buffer packing.
+    source_vertex_formats: list[dict] = field(default_factory=list)
 
 
 @dataclass
