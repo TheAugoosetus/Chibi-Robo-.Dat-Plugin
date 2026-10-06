@@ -89,18 +89,29 @@ def compose_scene(ir_scene, options=None, logger=StubLogger()):
 
         # Compose animations
         anim_roots = compose_bone_animations(
-            model.bone_animations, joints, model.bones, logger)
+            model.bone_animations, joints, model.bones, logger,
+            slot_map=getattr(model, 'animation_slot_map', None))
 
         # Compose material animations
         mat_anim_roots = None
         if model.bone_animations:
-            mat_roots = []
+            # Keep this list aligned with the unique bone-animation list.
+            # A missing material animation is a null slot, not a reason to
+            # compact later entries toward the front.
+            unique_mat_roots = []
             for anim_set in model.bone_animations:
+                root = None
                 if anim_set.material_tracks:
-                    root = compose_material_animations(anim_set, model.bones, model.meshes, logger)
-                    if root:
-                        mat_roots.append(root)
-            mat_anim_roots = mat_roots if mat_roots else None
+                    root = compose_material_animations(
+                        anim_set, model.bones, model.meshes, logger)
+                unique_mat_roots.append(root)
+
+            if any(root is not None for root in unique_mat_roots):
+                slot_map = getattr(model, 'animation_slot_map', None) or []
+                if slot_map and all(0 <= i < len(unique_mat_roots) for i in slot_map):
+                    mat_anim_roots = [unique_mat_roots[i] for i in slot_map]
+                else:
+                    mat_anim_roots = unique_mat_roots
 
         model_set = ModelSet(address=None, blender_obj=None)
         model_set.root_joint = root_joint
