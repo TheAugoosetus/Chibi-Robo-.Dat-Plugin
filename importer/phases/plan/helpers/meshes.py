@@ -95,6 +95,9 @@ def plan_meshes(ir_model):
             source_skin_type=(
                 ir_mesh.bone_weights.type.value if ir_mesh.bone_weights else None
             ),
+            source_vertex_formats=[
+                dict(fmt) for fmt in getattr(ir_mesh, 'source_vertex_formats', [])
+            ],
         ))
 
     br_instances = plan_mesh_instances(ir_model)
