@@ -15,7 +15,8 @@ try:
     from .....shared.Constants.gx import (
         GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_CLR1,
         GX_VA_TEX0, GX_VA_PNMTXIDX,
-        GX_INDEX16, GX_DIRECT, GX_F32, GX_RGBA8,
+        GX_INDEX8, GX_INDEX16, GX_DIRECT,
+        GX_U8, GX_S8, GX_U16, GX_S16, GX_F32, GX_RGBA8,
         GX_POS_XYZ, GX_NRM_XYZ, GX_TEX_ST,
         GX_DRAW_TRIANGLES, GX_DRAW_QUADS, GX_DRAW_TRIANGLE_STRIP,
     )
@@ -38,7 +39,8 @@ except (ImportError, SystemError):
     from shared.Constants.gx import (
         GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_CLR1,
         GX_VA_TEX0, GX_VA_PNMTXIDX,
-        GX_INDEX16, GX_DIRECT, GX_F32, GX_RGBA8,
+        GX_INDEX8, GX_INDEX16, GX_DIRECT,
+        GX_U8, GX_S8, GX_U16, GX_S16, GX_F32, GX_RGBA8,
         GX_POS_XYZ, GX_NRM_XYZ, GX_TEX_ST,
         GX_DRAW_TRIANGLES, GX_DRAW_QUADS, GX_DRAW_TRIANGLE_STRIP,
     )
@@ -297,16 +299,46 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
 
     # Vertices are already in GC units — the pre-scale pass in compose_scene
     # converted the whole IRScene from meters to GC units once up front.
-    pos_data, pos_buffer = _encode_float3_buffer(export_vertices)
-    pos_desc = _make_vertex_desc(GX_VA_POS, GX_POS_XYZ, GX_F32, stride=12)
+    # Preserve an imported DAT's compact GX packing (typically S16 fixed
+    # point in Chibi-Robo) when the edited values still fit it.
+    pos_fmt = _source_vertex_format(ir_mesh, GX_VA_POS)
+    pos_encoded = _encode_source_numeric_buffer(
+        export_vertices, pos_fmt, expected_components=3)
+    if pos_encoded is not None:
+        pos_data, pos_buffer = pos_encoded
+        pos_desc = _make_vertex_desc_from_source(
+            GX_VA_POS, pos_fmt, len(pos_data),
+            GX_POS_XYZ, GX_F32, 12)
+    else:
+        if pos_fmt is not None:
+            logger.warning(
+                "      pobj '%s': edited positions no longer fit source GX "
+                "format; falling back to F32", ir_mesh.name)
+        pos_data, pos_buffer = _encode_float3_buffer(export_vertices)
+        pos_desc = _make_vertex_desc(GX_VA_POS, GX_POS_XYZ, GX_F32, stride=12)
     pos_desc.raw_vertex_data = pos_buffer
     vertex_descs.append(pos_desc)
     vertex_buffers.append(pos_data)
 
-    # Normals — per-loop, need to de-duplicate into indexed buffer
+    # Normals — per-loop, need to de-duplicate into indexed buffer. Preserve
+    # Chibi-Robo's compact S8 fixed-point normals when possible; this matters
+    # for both file size and reflection-coordinate generation.
     if ir_mesh.normals:
-        nrm_verts, nrm_indices, nrm_buffer = _encode_indexed_float3(ir_mesh.normals)
-        nrm_desc = _make_vertex_desc(GX_VA_NRM, GX_NRM_XYZ, GX_F32, stride=12)
+        nrm_fmt = _source_vertex_format(ir_mesh, GX_VA_NRM)
+        nrm_encoded = _encode_indexed_source_numeric(
+            ir_mesh.normals, nrm_fmt, expected_components=3)
+        if nrm_encoded is not None:
+            nrm_verts, nrm_indices, nrm_buffer = nrm_encoded
+            nrm_desc = _make_vertex_desc_from_source(
+                GX_VA_NRM, nrm_fmt, len(nrm_verts),
+                GX_NRM_XYZ, GX_F32, 12)
+        else:
+            if nrm_fmt is not None:
+                logger.warning(
+                    "      pobj '%s': edited normals no longer fit source GX "
+                    "format; falling back to F32", ir_mesh.name)
+            nrm_verts, nrm_indices, nrm_buffer = _encode_indexed_float3(ir_mesh.normals)
+            nrm_desc = _make_vertex_desc(GX_VA_NRM, GX_NRM_XYZ, GX_F32, stride=12)
         nrm_desc.raw_vertex_data = nrm_buffer
         vertex_descs.append(nrm_desc)
         vertex_buffers.append(('normals', nrm_verts, nrm_indices))
@@ -341,15 +373,8 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
         vertex_descs.append(clr_desc)
         vertex_buffers.append(('color', clr_verts, clr_indices))
 
-    # HSDLib parity: normals and vertex colors are mutually exclusive per
-    # PObject on GameCube. No shipped game PObject in the corpus carries
-    # both. Until we implement per-attribute PObject splitting, warn so
-    # the user can decide whether to strip one attribute in the source.
-    attrs = {d.attribute for d in vertex_descs}
-    if GX_VA_NRM in attrs and (GX_VA_CLR0 in attrs or GX_VA_CLR1 in attrs):
-        logger.warning("      pobj '%s': carries both NRM and CLR — no shipped "
-                       "game PObjects do this; one attribute will likely be "
-                       "ignored at render time", ir_mesh.name)
+    # Chibi-Robo legitimately uses NRM and CLR attributes together. Keep both
+    # when present; the HSD/GX renderer consumes the full descriptor list.
 
     # Determine cull flags (shared across all split PObjects)
     cull_flags = POBJ_CULLBACK
@@ -719,6 +744,154 @@ def _make_vertex_desc(attribute, component_count, component_type, stride):
     return v
 
 
+_NUMERIC_COMPONENT_TYPES = {
+    GX_U8: ('uchar', 0, 255, 1),
+    GX_S8: ('char', -128, 127, 1),
+    GX_U16: ('ushort', 0, 65535, 2),
+    GX_S16: ('short', -32768, 32767, 2),
+    GX_F32: ('float', None, None, 4),
+}
+
+
+def _source_vertex_format(ir_mesh, attribute):
+    """Return preserved source GX descriptor metadata for one attribute."""
+    for fmt in getattr(ir_mesh, 'source_vertex_formats', None) or []:
+        try:
+            if int(fmt.get('attribute')) == attribute:
+                return fmt
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return None
+
+
+def _numeric_format_info(fmt, expected_components):
+    """Validate a preserved numeric GX descriptor for re-use.
+
+    Returns (pack_type, lo, hi, component_size, component_frac) or None.
+    Only tightly-packed indexed numeric buffers are reused; unusual layouts
+    safely fall back to the generic F32 writer.
+    """
+    if not isinstance(fmt, dict):
+        return None
+    try:
+        attr_type = int(fmt.get('attribute_type'))
+        comp_type = int(fmt.get('component_type'))
+        frac = int(fmt.get('component_frac', 0))
+        stride = int(fmt.get('stride'))
+    except (TypeError, ValueError):
+        return None
+    if attr_type not in (GX_INDEX8, GX_INDEX16):
+        return None
+    info = _NUMERIC_COMPONENT_TYPES.get(comp_type)
+    if info is None:
+        return None
+    pack_type, lo, hi, size = info
+    if stride != size * expected_components:
+        return None
+    if comp_type == GX_F32 and frac != 0:
+        return None
+    if not (0 <= frac <= 31):
+        return None
+    return pack_type, lo, hi, size, frac
+
+
+def _quantize_numeric_tuple(value, info, expected_components):
+    pack_type, lo, hi, _size, frac = info
+    vals = tuple(float(value[i]) for i in range(expected_components))
+    if pack_type == 'float':
+        return vals
+    scale = 1 << frac
+    out = []
+    for v in vals:
+        q = int(round(v * scale))
+        if q < lo or q > hi:
+            return None
+        out.append(q)
+    return tuple(out)
+
+
+def _pack_quantized_tuple(values, pack_type):
+    return pack_many(pack_type, *values)
+
+
+def _encode_source_numeric_buffer(values, fmt, expected_components):
+    """Encode a position-style array using preserved GX numeric packing."""
+    info = _numeric_format_info(fmt, expected_components)
+    if info is None:
+        return None
+    pack_type = info[0]
+    quantized = []
+    buf = bytearray()
+    for value in values:
+        q = _quantize_numeric_tuple(value, info, expected_components)
+        if q is None:
+            return None
+        quantized.append(value)
+        buf.extend(_pack_quantized_tuple(q, pack_type))
+    return quantized, bytes(buf)
+
+
+def _encode_indexed_source_numeric(per_loop_data, fmt, expected_components):
+    """Deduplicate + encode loop data on the source GX quantization grid."""
+    info = _numeric_format_info(fmt, expected_components)
+    if info is None:
+        return None
+    pack_type = info[0]
+    unique_values = []
+    unique_quantized = []
+    index_map = {}
+    indices = []
+    for value in per_loop_data:
+        q = _quantize_numeric_tuple(value, info, expected_components)
+        if q is None:
+            return None
+        if q not in index_map:
+            index_map[q] = len(unique_values)
+            unique_values.append(value)
+            unique_quantized.append(q)
+        indices.append(index_map[q])
+
+    # INDEX8 cannot address more than 256 unique entries. Promote only the
+    # display-list index width; keep the source component packing itself.
+    buf = bytearray()
+    for q in unique_quantized:
+        buf.extend(_pack_quantized_tuple(q, pack_type))
+    return unique_values, indices, bytes(buf)
+
+
+def _make_vertex_desc_from_source(attribute, fmt, element_count,
+                                  fallback_count, fallback_type, fallback_stride):
+    """Build a descriptor from source metadata, promoting INDEX8 if needed."""
+    if not isinstance(fmt, dict):
+        return _make_vertex_desc(
+            attribute, fallback_count, fallback_type, fallback_stride)
+    try:
+        attr_type = int(fmt.get('attribute_type'))
+        component_count = int(fmt.get('component_count'))
+        component_type = int(fmt.get('component_type'))
+        component_frac = int(fmt.get('component_frac', 0))
+        stride = int(fmt.get('stride'))
+    except (TypeError, ValueError):
+        return _make_vertex_desc(
+            attribute, fallback_count, fallback_type, fallback_stride)
+
+    if attr_type == GX_INDEX8 and element_count > 256:
+        attr_type = GX_INDEX16
+    elif attr_type not in (GX_INDEX8, GX_INDEX16):
+        attr_type = GX_INDEX16
+
+    v = Vertex(address=None, blender_obj=None)
+    v.attribute = attribute
+    v.attribute_type = attr_type
+    v.component_count = component_count
+    v.component_type = component_type
+    v.component_frac = component_frac
+    v.stride = stride
+    v.base_pointer = _alloc_base_pointer()
+    v.raw_vertex_data = b''
+    return v
+
+
 def _encode_float3_buffer(vertices):
     """Encode a list of (x,y,z) tuples into a float32 vertex buffer.
 
@@ -1071,6 +1244,16 @@ def _group_faces_for_display_list(faces):
     return blocks
 
 
+def _pack_display_index(desc, index):
+    """Encode a GX indexed-attribute reference at the descriptor's width."""
+    if desc.attribute_type == GX_INDEX8:
+        if not (0 <= index <= 0xFF):
+            raise ValueError(
+                "GX_INDEX8 descriptor cannot address vertex index %d" % index)
+        return pack('uchar', index)
+    return pack('ushort', index)
+
+
 def _dl_vertex_bytes(pos_index, loop_index, vertex_descs, vertex_buffers):
     """The display-list byte record for one vertex (one index per descriptor).
 
@@ -1093,7 +1276,7 @@ def _dl_vertex_bytes(pos_index, loop_index, vertex_descs, vertex_buffers):
                 f"splitting (should have been handled by _build_split_pobjs)")
             rec.append(env_idx * 3)
         elif desc.attribute == GX_VA_POS:
-            rec.extend(pack('ushort', pos_index))
+            rec.extend(_pack_display_index(desc, pos_index))
         elif isinstance(vbuf, tuple) and len(vbuf) == 3:
             # Per-loop attribute (normals, UVs, colors)
             _, _, per_loop_indices = vbuf
@@ -1101,9 +1284,9 @@ def _dl_vertex_bytes(pos_index, loop_index, vertex_descs, vertex_buffers):
                 idx = per_loop_indices[loop_index]
             else:
                 idx = 0
-            rec.extend(pack('ushort', idx))
+            rec.extend(_pack_display_index(desc, idx))
         else:
-            rec.extend(pack('ushort', pos_index))
+            rec.extend(_pack_display_index(desc, pos_index))
     return bytes(rec)
 
 
