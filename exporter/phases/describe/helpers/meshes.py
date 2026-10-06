@@ -10,6 +10,7 @@ BRMaterial in the parallel list that BRMesh.material_index points into.
 """
 import math
 import re
+import json
 import bpy
 from mathutils import Matrix
 
@@ -174,6 +175,19 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
             # object. _build_submesh deliberately does not know about bpy
             # objects, so attach this metadata here at the object boundary.
             br_mesh.source_skin_type = mesh_obj.get("dat_hsd_skin_type")
+            raw_formats = mesh_obj.get("dat_hsd_vertex_formats")
+            if isinstance(raw_formats, str) and raw_formats:
+                try:
+                    parsed_formats = json.loads(raw_formats)
+                    if isinstance(parsed_formats, list):
+                        br_mesh.source_vertex_formats = [
+                            dict(fmt) for fmt in parsed_formats
+                            if isinstance(fmt, dict)
+                        ]
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "  Mesh '%s' has invalid dat_hsd_vertex_formats metadata; "
+                        "using generic GX formats", mesh_obj.name)
             out_meshes.append(br_mesh)
             out_materials.append(ir_mat)
 
