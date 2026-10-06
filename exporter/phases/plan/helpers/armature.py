@@ -112,9 +112,16 @@ def plan_armature(br_armature, logger=StubLogger()):
 
         ir_spline = _plan_bone_spline(getattr(br_bone, 'spline', None))
 
-        flags = JOBJ_HIDDEN if br_bone.is_hidden else 0
+        source_hsd_flags = getattr(br_bone, 'source_hsd_flags', None)
+        flags = int(source_hsd_flags) if source_hsd_flags is not None else 0
+        if br_bone.is_hidden:
+            flags |= JOBJ_HIDDEN
+        else:
+            flags &= ~JOBJ_HIDDEN
         if ir_spline is not None:
             flags |= JOBJ_SPLINE
+        else:
+            flags &= ~JOBJ_SPLINE
 
         identity_list = _identity_4x4()
         inverse_bind = _inverse_4x4(world)
@@ -137,6 +144,7 @@ def plan_armature(br_armature, logger=StubLogger()):
             scale_correction=identity_list,
             accumulated_scale=accumulated_scale,
             spline=ir_spline,
+            source_hsd_flags=source_hsd_flags,
         ))
 
     root_count = sum(1 for b in bones if b.parent_index is None)
