@@ -162,6 +162,18 @@ def _describe_pobj(pobj, joint, bone_index, count,
     if bone_weights and bone_weights.type in (SkinType.RIGID, SkinType.SINGLE_BONE):
         verts_out = _world_transform_vertices(verts_out, bones[bone_index].world_matrix)
 
+    source_vertex_formats = [
+        {
+            "attribute": int(v.attribute),
+            "attribute_type": int(v.attribute_type),
+            "component_count": int(v.component_count),
+            "component_type": int(v.component_type),
+            "component_frac": int(v.component_frac),
+            "stride": int(v.stride),
+        }
+        for v in pobj.vertex_list.vertices
+    ]
+
     return IRMesh(
         name=pobj.name if pobj.name else str(count),
         vertices=verts_out,
@@ -175,6 +187,7 @@ def _describe_pobj(pobj, joint, bone_index, count,
         parent_bone_index=bone_index,
         cull_front=bool(pobj.flags & POBJ_CULLFRONT),
         cull_back=bool(pobj.flags & POBJ_CULLBACK),
+        source_vertex_formats=source_vertex_formats,
     )
 
 
