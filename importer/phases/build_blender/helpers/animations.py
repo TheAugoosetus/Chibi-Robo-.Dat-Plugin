@@ -61,8 +61,11 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
         armature.animation_data.action = action
         armature.animation_data.action_slot = armature_slot
 
-        _bake_action(br_action.bone_tracks, action, max_frame, bake_skeleton,
-                     logger, armature)
+        _bake_action(
+            br_action.bone_tracks, action, max_frame, bake_skeleton,
+            logger, armature,
+            per_action_scale=(options.get("game") == "CHIBI_ROBO"),
+        )
 
         mat_fcurve_count = _build_material_tracks(
             br_action, action, material_lookup, mat_slot_indices, max_frame,
@@ -105,7 +108,8 @@ _LOC_INDICES = (4, 5, 6)
 _SCL_INDICES = (7, 8, 9)
 
 
-def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature):
+def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature,
+                 per_action_scale=False):
     """Bake one action into final loc/rot/scale fcurves.
 
     Every posed bone goes through one mechanism: Plan (``bake_frame``) composes
@@ -150,7 +154,16 @@ def _bake_action(bone_tracks, action, max_frame, bake_skeleton, logger, armature
 
     global_end = max(end_by_bone.values())
 
-    bake_indices, levels = compute_bake_plan(bake_skeleton, set(raw_by_bone))
+    scale_animated = {
+        track.bone_index for track in pose_tracks
+        if any(track.scale)
+    }
+    bake_indices, levels = compute_bake_plan(
+        bake_skeleton,
+        set(raw_by_bone),
+        scale_animated_indices=scale_animated,
+        per_action_scale=per_action_scale,
+    )
     bake_indices = [i for i in bake_indices if i not in path_indices]
     levels = [[i for i in lvl if i not in path_indices] for lvl in levels]
 
