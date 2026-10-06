@@ -10,6 +10,7 @@ from .importer import Importer as IRImporter
 from .importer.phases.extract.extract import extract_dat
 from .importer.phases.route.route import route_sections
 from .shared.helpers.logger import Logger, StubLogger
+from .shared.version import PLUGIN_VERSION
 
 # Routing node types compatible with the legacy importer
 _LEGACY_TYPE_MAP = {
@@ -20,8 +21,8 @@ _LEGACY_TYPE_MAP = {
 
 class ImportHSD(bpy.types.Operator, ImportHelper):
     """Load a DAT model"""
-    bl_idname = "import_model.dat"
-    bl_label = "Import DAT"
+    bl_idname = "import_model.chibi_robo_dat"
+    bl_label = "Import Chibi-Robo DAT v%s" % PLUGIN_VERSION
     bl_options = {'UNDO'}
 
     files: CollectionProperty(name="File Path",
@@ -104,6 +105,7 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
         model_name = filename.split('.')[0] if filename else "unknown"
 
         logger = Logger(model_name=model_name)
+        logger.info("Chibi-Robo DAT Model plugin build %s", PLUGIN_VERSION)
 
         options = {
             "ik_hack": True,
@@ -168,8 +170,8 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
 
 class ExportHSD(bpy.types.Operator, ExportHelper):
     """Export selected armature(s) as a DAT model"""
-    bl_idname = "export_model.dat"
-    bl_label = "Export DAT"
+    bl_idname = "export_model.chibi_robo_dat"
+    bl_label = "Export Chibi-Robo DAT v%s" % PLUGIN_VERSION
 
     filename_ext = ".dat"
     filter_glob: StringProperty(default="*.dat;*.pkx", options={'HIDDEN'})
@@ -197,6 +199,8 @@ class ExportHSD(bpy.types.Operator, ExportHelper):
             logger = Logger(verbose=self.verbose, model_name=model_name)
         else:
             logger = StubLogger()
+
+        logger.info("Chibi-Robo DAT Model plugin build %s", PLUGIN_VERSION)
 
         options = {
             'strip_names': self.strip_names,
@@ -250,11 +254,17 @@ def _setup_anim_workspace(context):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportHSD.bl_idname, text="Gamecube DAT Model (.dat)")
+    self.layout.operator(
+        ImportHSD.bl_idname,
+        text="Chibi-Robo DAT Model (.dat) — v%s" % PLUGIN_VERSION,
+    )
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ExportHSD.bl_idname, text="Gamecube DAT Model (.dat)")
+    self.layout.operator(
+        ExportHSD.bl_idname,
+        text="Chibi-Robo DAT Model (.dat) — v%s" % PLUGIN_VERSION,
+    )
 
 
 _SHINY_CHANNEL_ITEMS = [
