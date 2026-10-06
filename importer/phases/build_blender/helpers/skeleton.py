@@ -72,6 +72,7 @@ def build_skeleton(br_armature, context, logger=StubLogger()):
         data_bone = armature_data.bones.get(br_bone.name)
         if data_bone is not None:
             data_bone["dat_hsd_flags"] = int(br_bone.source_hsd_flags)
+            data_bone.hide = bool(br_bone.is_hidden)
 
     _build_bone_splines(br_armature, armature, logger)
 
