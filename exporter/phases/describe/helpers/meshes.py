@@ -251,6 +251,7 @@ def _build_submesh(mesh_name, mat_index, num_materials,
         parent_bone_name=parent_bone_name,
         is_hidden=is_hidden,
         material_index=None,  # filled by caller
+        source_skin_type=mesh_obj.get("dat_hsd_skin_type"),
     )
     # Stash extras the IRMesh needs but BRMesh doesn't model yet.
     br_mesh._cull_front = cull_front
@@ -278,8 +279,8 @@ def _extract_normals(mesh_data, normal_xform):
     black/missing in-game even though Blender — which computes its own
     normals — looked correct.
     """
-    if _has_varying_vertex_colors(mesh_data):
-        return None
+    # Chibi-Robo stock DATs can carry both NRM and CLR0. Reflection-mapped
+    # materials also require normals for HSD texture-coordinate generation.
     if hasattr(mesh_data, 'corner_normals'):
         raw = [cn.vector for cn in mesh_data.corner_normals]
     else:
