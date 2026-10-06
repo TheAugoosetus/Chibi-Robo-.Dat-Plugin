@@ -13,6 +13,7 @@ copy via the pure ``plan_*`` helpers. Those copies are not handed to the
 plan phase — plan re-derives IR from BR itself, keeping BR → IR a
 self-contained transform that works on any BRScene.
 """
+import json
 import bpy
 
 try:
@@ -196,11 +197,24 @@ def _describe_one_model(armature, use_bezier, logger, image_cache=None):
     # BRBoneTracks with the same field names, so they pass straight in.
     maybe_dump_diagnostic(armature, ir_bones, br_actions, logger)
 
+    animation_slot_map = []
+    raw_slot_map = armature.get("dat_hsd_animation_slot_map")
+    if isinstance(raw_slot_map, str) and raw_slot_map:
+        try:
+            parsed = json.loads(raw_slot_map)
+            if (isinstance(parsed, list)
+                    and all(isinstance(i, int) for i in parsed)
+                    and all(0 <= i < len(br_actions) for i in parsed)):
+                animation_slot_map = parsed
+        except (ValueError, TypeError):
+            pass
+
     return BRModel(
         name=armature.name,
         armature=br_armature,
         meshes=br_meshes,
         materials=br_materials,
         actions=br_actions,
+        animation_slot_map=animation_slot_map,
         constraints=br_constraints,
     )
