@@ -201,6 +201,12 @@ def compose_bone_animations(bone_animations, joints, bones, logger=StubLogger(),
 
 def _compose_anim_set(anim_set, joints, bones, logger):
     """Build an AnimationJoint tree for one IRBoneAnimationSet."""
+    source = getattr(anim_set, "source_hsd_animation", None)
+    if source is not None:
+        source_root = _compose_source_anim_set(source, bones, logger)
+        if source_root is not None:
+            return source_root
+
     # Index tracks by bone index for quick lookup
     track_by_bone = {}
     for track in anim_set.tracks:
@@ -223,7 +229,66 @@ def _compose_anim_set(anim_set, joints, bones, logger):
 
         anim_joints.append(aj)
 
-    # Reconstruct child/next tree from parent_index
+    return _link_anim_joint_hierarchy(anim_joints, bones)
+
+
+def _compose_source_anim_set(source, bones, logger):
+    """Rebuild an untouched imported HSD animation from its original FObj bytes."""
+    entries = source.get("bones", []) if isinstance(source, dict) else []
+    if len(entries) != len(bones):
+        logger.warning(
+            "    source HSD animation has %d bone entries for %d bones; "
+            "falling back to rebuilt curves", len(entries), len(bones))
+        return None
+
+    anim_joints = []
+    for i, entry in enumerate(entries):
+        aj = AnimationJoint(address=None, blender_obj=None)
+        aj.child = None
+        aj.next = None
+        aj.render_animation = None
+        aj.flags = int(entry.get("aj_flags", 0)) if isinstance(entry, dict) else 0
+        aj.animation = None
+
+        anim_meta = entry.get("animation") if isinstance(entry, dict) else None
+        if anim_meta is not None:
+            if anim_meta.get("has_joint_target"):
+                logger.warning(
+                    "    source HSD animation bone %d uses Animation.joint; "
+                    "falling back to rebuilt curves", i)
+                return None
+
+            anim = Animation(address=None, blender_obj=None)
+            anim.flags = int(anim_meta.get("flags", 0))
+            anim.end_frame = float(anim_meta.get("end_frame", 0.0))
+            anim.joint = None
+
+            frames = []
+            for frame_meta in anim_meta.get("frames", []):
+                frame = Frame(address=None, blender_obj=None)
+                frame.next = None
+                frame.start_frame = float(frame_meta.get("start_frame", 0.0))
+                frame.type = int(frame_meta.get("type", 0))
+                frame.frac_value = int(frame_meta.get("frac_value", 0))
+                frame.frac_slope = int(frame_meta.get("frac_slope", 0))
+                frame.raw_ad = bytes(frame_meta.get("raw_ad", b""))
+                frame.data_length = len(frame.raw_ad)
+                frame.ad = 0
+                frames.append(frame)
+
+            for j in range(len(frames) - 1):
+                frames[j].next = frames[j + 1]
+            anim.frame = frames[0] if frames else None
+            aj.animation = anim
+
+        anim_joints.append(aj)
+
+    logger.debug("    Reused source HSD animation payload for %d bones", len(bones))
+    return _link_anim_joint_hierarchy(anim_joints, bones)
+
+
+def _link_anim_joint_hierarchy(anim_joints, bones):
+    """Link a flat AnimationJoint list using the model bone hierarchy."""
     children_of = defaultdict(list)
     roots = []
     for i, bone in enumerate(bones):
