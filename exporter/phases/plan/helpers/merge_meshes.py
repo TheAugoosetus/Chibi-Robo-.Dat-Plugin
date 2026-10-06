@@ -49,6 +49,10 @@ def _merge_key(m):
         m.normals is None,
         m.shape_keys is not None and len(m.shape_keys) > 0,
         _weights_shape(m.bone_weights),
+        tuple(
+            tuple(sorted(fmt.items()))
+            for fmt in (getattr(m, 'source_vertex_formats', None) or [])
+        ),
     )
 
 
@@ -126,6 +130,10 @@ def _clone_seed(m):
         local_matrix=m.local_matrix,
         cull_front=m.cull_front,
         cull_back=m.cull_back,
+        source_vertex_formats=[
+            dict(fmt) for fmt in (getattr(m, 'source_vertex_formats', None) or [])
+        ],
+        id=m.id,
     )
 
 
