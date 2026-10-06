@@ -135,6 +135,7 @@ def describe_bone_animations(model_set, joint_to_bone_index, bones, options, log
         if options.get("game") == "CHIBI_ROBO":
             source_hsd_animation = _snapshot_source_hsd_animation(
                 anim_joint_root, root_joint, joint_to_bone_index, bones)
+            source_hsd_animation["loop"] = bool(loop[0])
 
         anim_set = IRBoneAnimationSet(
             name=name,
