@@ -90,6 +90,7 @@ def _plan_single_action(anim_set):
             t.bone_name: _source_channel_mask(t)
             for t in anim_set.tracks
         },
+        source_hsd_animation=getattr(anim_set, "source_hsd_animation", None),
     )
 
 
