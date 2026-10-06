@@ -161,7 +161,8 @@ def _pick_quantization(values, channel_type=None):
     return HSD_A_FRAC_FLOAT, 'float'
 
 
-def compose_bone_animations(bone_animations, joints, bones, logger=StubLogger()):
+def compose_bone_animations(bone_animations, joints, bones, logger=StubLogger(),
+                            slot_map=None):
     """Convert IRBoneAnimationSet list into AnimationJoint tree roots.
 
     Args:
@@ -182,10 +183,20 @@ def compose_bone_animations(bone_animations, joints, bones, logger=StubLogger())
         if root is not None:
             results.append(root)
 
-    if results:
-        logger.info("    Composed %d animation set(s)", len(results))
+    if not results:
+        return None
 
-    return results if results else None
+    if slot_map:
+        if all(isinstance(i, int) and 0 <= i < len(results) for i in slot_map):
+            expanded = [results[i] for i in slot_map]
+            logger.info("    Composed %d unique animation set(s) into %d aliased slot(s)",
+                        len(results), len(expanded))
+            return expanded
+        logger.warning("    Ignoring invalid animation slot map (%d entries for %d actions)",
+                       len(slot_map), len(results))
+
+    logger.info("    Composed %d animation set(s)", len(results))
+    return results
 
 
 def _compose_anim_set(anim_set, joints, bones, logger):
