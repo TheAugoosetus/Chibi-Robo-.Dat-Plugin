@@ -10,8 +10,8 @@ try:
     from .....shared.IR.fog import IRFog
     from .....shared.Constants.hsd import (
         JOBJ_SKELETON, JOBJ_SKELETON_ROOT, JOBJ_ENVELOPE_MODEL,
-        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE,
-        JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_HIDDEN,
+        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
+        JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_ROOT_XLU, JOBJ_HIDDEN,
     )
     from .....shared.helpers.logger import StubLogger
 except (ImportError, SystemError):
@@ -19,8 +19,8 @@ except (ImportError, SystemError):
     from shared.IR.fog import IRFog
     from shared.Constants.hsd import (
         JOBJ_SKELETON, JOBJ_SKELETON_ROOT, JOBJ_ENVELOPE_MODEL,
-        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE,
-        JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_HIDDEN,
+        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
+        JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_ROOT_XLU, JOBJ_HIDDEN,
     )
     from shared.helpers.logger import StubLogger
 
@@ -114,8 +114,21 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
             if i in opa_descendant: opa_descendant.add(pi)
             if i in texedge_descendant: texedge_descendant.add(pi)
 
+    draw_pass_mask = JOBJ_OPA | JOBJ_TEXEDGE | JOBJ_XLU
+    root_draw_pass_mask = JOBJ_ROOT_OPA | JOBJ_ROOT_TEXEDGE | JOBJ_ROOT_XLU
+    structurally_derived_mask = (
+        JOBJ_SKELETON | JOBJ_SKELETON_ROOT | JOBJ_ENVELOPE_MODEL |
+        JOBJ_LIGHTING | JOBJ_HIDDEN
+    )
+
     for i, bone in enumerate(bones):
-        flags = 0
+        source_flags = getattr(bone, 'source_hsd_flags', None)
+        flags = int(source_flags) if source_flags is not None else 0
+        # Recompute topology-dependent bits, but retain source HSD state that
+        # Blender cannot represent (including TEXGEN, SPECULAR and billboard).
+        flags &= ~structurally_derived_mask
+        if source_flags is None:
+            flags &= ~(draw_pass_mask | root_draw_pass_mask)
 
         if bone.parent_index is None:
             flags |= JOBJ_SKELETON_ROOT
@@ -124,17 +137,21 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
 
         if i in bones_with_meshes:
             flags |= JOBJ_LIGHTING
-            if i in bones_with_opa:
-                flags |= JOBJ_OPA
-            if i in bones_with_texedge:
-                flags |= JOBJ_TEXEDGE
+            # Imported Chibi-Robo DATs keep their authored draw pass. New
+            # Blender-authored bones fall back to material-derived flags.
+            if source_flags is None or not (source_flags & draw_pass_mask):
+                if i in bones_with_opa:
+                    flags |= JOBJ_OPA
+                if i in bones_with_texedge:
+                    flags |= JOBJ_TEXEDGE
             if i in bones_with_envelope:
                 flags |= JOBJ_ENVELOPE_MODEL
 
-        if i in opa_descendant:
-            flags |= JOBJ_ROOT_OPA
-        if i in texedge_descendant:
-            flags |= JOBJ_ROOT_TEXEDGE
+        if source_flags is None or not (source_flags & root_draw_pass_mask):
+            if i in opa_descendant:
+                flags |= JOBJ_ROOT_OPA
+            if i in texedge_descendant:
+                flags |= JOBJ_ROOT_TEXEDGE
 
         if bone.is_hidden:
             flags |= JOBJ_HIDDEN
