@@ -171,6 +171,16 @@ def _describe_one_model(armature, use_bezier, logger, image_cache=None):
     self-contained transform that works on any BRScene, not only one
     produced by this describe phase.
     """
+    source_game = armature.get("dat_game_origin")
+    source_build = armature.get("dat_plugin_build")
+    logger.info(
+        "  Source metadata: game=%s imported_by=%s alias_slots=%s unique_actions=%s",
+        source_game or "<none>",
+        source_build or "<none>",
+        armature.get("dat_hsd_animation_slot_count", "<none>"),
+        armature.get("dat_hsd_animation_unique_count", "<none>"),
+    )
+
     br_armature = describe_armature(armature, logger=logger)
     ir_bones = plan_armature(br_armature, logger=logger)
 
@@ -207,7 +217,19 @@ def _describe_one_model(armature, use_bezier, logger, image_cache=None):
                     and all(0 <= i < len(br_actions) for i in parsed)):
                 animation_slot_map = parsed
         except (ValueError, TypeError):
-            pass
+            logger.warning("  Invalid dat_hsd_animation_slot_map metadata; aliases will not be restored")
+
+    if source_game == "CHIBI_ROBO":
+        expected_slots = armature.get("dat_hsd_animation_slot_count")
+        if expected_slots and not animation_slot_map:
+            logger.warning(
+                "  Chibi source reports %s original animation slots but no valid "
+                "slot map survived; export would duplicate unique actions",
+                expected_slots)
+        elif animation_slot_map:
+            logger.info(
+                "  Restoring Chibi animation aliases: %d slot(s) from %d unique Action(s)",
+                len(animation_slot_map), len(br_actions))
 
     return BRModel(
         name=armature.name,
