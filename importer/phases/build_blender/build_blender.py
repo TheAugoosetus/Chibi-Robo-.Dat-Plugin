@@ -16,8 +16,10 @@ from .helpers.particles import build_particles
 
 try:
     from ....shared.helpers.logger import StubLogger
+    from ....shared.helpers.blender_fingerprint import armature_rest_fingerprint
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import armature_rest_fingerprint
 
 
 def build_blender_scene(br_scene, context, options, logger=StubLogger()):
@@ -45,6 +47,9 @@ def build_blender_scene(br_scene, context, options, logger=StubLogger()):
         armature = build_skeleton(br_model.armature, context, logger=logger)
         material_lookup = build_meshes(br_model, armature, context, logger=logger)
         reset_pose(armature)
+        if armature.get("dat_game_origin") == "CHIBI_ROBO":
+            armature["dat_hsd_source_skeleton_fingerprint"] = (
+                armature_rest_fingerprint(armature))
 
         actions = []
         mat_slot_indices = {}
