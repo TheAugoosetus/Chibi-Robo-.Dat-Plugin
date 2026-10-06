@@ -82,6 +82,8 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
     mesh_data = bpy.data.meshes.new(br_mesh.name)
     mesh_object = bpy.data.objects.new(br_mesh.name, mesh_data)
     mesh_object.location = Vector((0, 0, 0))
+    if br_mesh.source_skin_type is not None:
+        mesh_object["dat_hsd_skin_type"] = br_mesh.source_skin_type
 
     bpy.context.scene.collection.objects.link(mesh_object)
 
