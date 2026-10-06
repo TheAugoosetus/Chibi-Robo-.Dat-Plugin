@@ -21,6 +21,10 @@ class IRMesh:
     local_matrix: list[list[float]] | None = None
     cull_front: bool = False
     cull_back: bool = False
+    # Source GX vertex descriptor words, one dict per original attribute.
+    # Preserved through Blender so imported DATs can keep their compact
+    # fixed-point position/normal/UV storage instead of expanding to F32.
+    source_vertex_formats: list[dict] = field(default_factory=list)
     # Opaque stable identifier used for cross-references (e.g.
     # IRMaterialTrack.material_mesh_name → this id). Not for display.
     # Minted at describe time and preserved through plan / merge /
