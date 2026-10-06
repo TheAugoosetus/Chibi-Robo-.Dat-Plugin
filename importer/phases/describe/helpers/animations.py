@@ -30,6 +30,59 @@ _CHANNEL_MAP = {
 }
 
 
+def _snapshot_source_hsd_animation(anim_joint_root, root_joint,
+                                   joint_to_bone_index, bones):
+    """Capture raw Chibi-Robo AObj/FObj data before Blender pose baking.
+
+    The snapshot is indexed by the model's bone indices and stores the exact
+    compressed FObj byte streams plus their encoding descriptors. It is carried
+    into Blender as preservation metadata and reused only while both the Action
+    and rest skeleton remain unchanged.
+    """
+    entries = [None] * len(bones)
+
+    def walk(anim_joint, joint):
+        if anim_joint is None or joint is None:
+            return
+        bone_index = joint_to_bone_index.get(joint.address)
+        if bone_index is not None and 0 <= bone_index < len(entries):
+            entry = {
+                "aj_flags": int(getattr(anim_joint, "flags", 0) or 0),
+                "animation": None,
+            }
+            aobj = getattr(anim_joint, "animation", None)
+            if aobj is not None:
+                frames = []
+                fobj = getattr(aobj, "frame", None)
+                while fobj is not None:
+                    frames.append({
+                        "type": int(fobj.type),
+                        "start_frame": float(fobj.start_frame),
+                        "frac_value": int(fobj.frac_value),
+                        "frac_slope": int(fobj.frac_slope),
+                        "raw_ad": bytes(getattr(fobj, "raw_ad", b"") or b""),
+                    })
+                    fobj = getattr(fobj, "next", None)
+                entry["animation"] = {
+                    "flags": int(aobj.flags),
+                    "end_frame": float(aobj.end_frame),
+                    "frames": frames,
+                    # Chibi-Robo cb_robo/title-icon animations surveyed so far
+                    # do not use Animation.joint. Keep the field explicit so a
+                    # future PATH implementation can extend this snapshot.
+                    "has_joint_target": bool(getattr(aobj, "joint", None)),
+                }
+            entries[bone_index] = entry
+
+        if getattr(anim_joint, "child", None) is not None and getattr(joint, "child", None) is not None:
+            walk(anim_joint.child, joint.child)
+        if getattr(anim_joint, "next", None) is not None and getattr(joint, "next", None) is not None:
+            walk(anim_joint.next, joint.next)
+
+    walk(anim_joint_root, root_joint)
+    return {"bones": entries}
+
+
 def describe_bone_animations(model_set, joint_to_bone_index, bones, options, logger=StubLogger(), model_name=None):
     """Walk AnimationJoint trees parallel to the Joint tree and emit one set per animation.
 
@@ -78,10 +131,16 @@ def describe_bone_animations(model_set, joint_to_bone_index, bones, options, log
         idx_str = str(i).zfill(anim_digits)
         name = "%s_%s_%s" % (name_prefix, idx_str, clean)
 
+        source_hsd_animation = None
+        if options.get("game") == "CHIBI_ROBO":
+            source_hsd_animation = _snapshot_source_hsd_animation(
+                anim_joint_root, root_joint, joint_to_bone_index, bones)
+
         anim_set = IRBoneAnimationSet(
             name=name,
             tracks=tracks,
             loop=loop[0],
+            source_hsd_animation=source_hsd_animation,
         )
         anim_sets.append(anim_set)
         logger.debug("  Animation set '%s': %d bone tracks", name, len(tracks))
