@@ -8,11 +8,9 @@ light and rendered black/missing in-game, even though Blender — which computes
 its own normals — looked fine.
 
 `_extract_normals` now extracts from `corner_normals` regardless, and instead
-respects the game's normals-XOR-vertex-colors rule keyed on *meaningful*
-colors: a mesh with per-vertex-varying colors keeps colors (no normals), while
-a uniform colour attribute (a material default that compose drops — every
-imported Pokémon model ships a uniform white `Color`) does NOT suppress
-normals.
+preserves normals even when vertex colors are present. Chibi-Robo stock DATs
+contain PObjects with both NRM and CLR0, and reflection-mapped materials need
+their normals for HSD texture-coordinate generation.
 """
 from types import SimpleNamespace
 
@@ -47,12 +45,11 @@ def test_extracts_normals_without_custom_normals():
     assert out == [(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
 
 
-def test_skips_normals_when_varying_vertex_colors_present():
-    """Normals XOR vertex colors: a mesh with per-vertex-varying colors keeps
-    its colors and omits normals so the PObject doesn't carry both."""
+def test_preserves_normals_when_varying_vertex_colors_present():
+    """Chibi-Robo ships PObjects carrying both NRM and CLR0; keep both."""
     varying = _color_attr([(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)])
     mesh = _mesh([(0.0, 0.0, 1.0)], color_attributes=[varying])
-    assert _extract_normals(mesh, _Identity()) is None
+    assert _extract_normals(mesh, _Identity()) == [(0.0, 0.0, 1.0)]
 
 
 def test_uniform_color_attribute_does_not_suppress_normals():
