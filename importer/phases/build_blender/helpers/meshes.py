@@ -4,6 +4,7 @@ Pure bpy executor — geometry, UV/color layers, vertex groups, instance
 copies, parent-bone ownership, and material node graphs all come
 pre-decided from the Plan phase.
 """
+import json
 import bpy
 from mathutils import Matrix, Vector
 
@@ -84,6 +85,9 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
     mesh_object.location = Vector((0, 0, 0))
     if br_mesh.source_skin_type is not None:
         mesh_object["dat_hsd_skin_type"] = br_mesh.source_skin_type
+    if br_mesh.source_vertex_formats:
+        mesh_object["dat_hsd_vertex_formats"] = json.dumps(
+            br_mesh.source_vertex_formats, separators=(',', ':'))
 
     bpy.context.scene.collection.objects.link(mesh_object)
 
