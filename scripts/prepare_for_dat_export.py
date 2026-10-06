@@ -511,7 +511,13 @@ def reparent_meshes_to_holder_bones(armature):
                     if nm in bone_names:
                         weighted.add(nm)
         mesh_weighted[m] = weighted
-        deformers |= weighted
+
+        # Imported HSD rigid/single-bound meshes carry vertex groups in
+        # Blender, but those groups do not mean POBJ_ENVELOPE. Only genuine
+        # weighted meshes participate in the owner/deformer disjoint rule.
+        source_skin = m.get("dat_hsd_skin_type")
+        if source_skin not in ("RIGID", "SINGLE_BONE"):
+            deformers |= weighted
 
     def owner_of(m):
         if m.parent_type == 'BONE' and m.parent_bone in bone_names:
@@ -938,11 +944,7 @@ if __name__ == "__main__" or True:
         if limited:
             print("  Limited %d vertex weights on '%s'" % (limited, arm.name))
 
-        if arm.get("dat_game_origin") == "CHIBI_ROBO":
-            holders = 0
-            print("  Chibi-Robo source: preserved stock rigid JOBJ ownership (holder-bone step skipped)")
-        else:
-            holders = reparent_meshes_to_holder_bones(arm)
+        holders = reparent_meshes_to_holder_bones(arm)
         if holders:
             print("  Inserted %d mesh-holder bone(s) on '%s'" % (holders, arm.name))
 
