@@ -63,6 +63,16 @@ def build_skeleton(br_armature, context, logger=StubLogger()):
     bpy.ops.object.mode_set(mode='OBJECT')
     bpy.context.view_layer.update()
 
+    # Blender has no native fields for several HSD JOBJ flags used by
+    # Chibi-Robo (for example TEXGEN, SPECULAR and draw-pass bits).
+    # Store the exact source word on the Blender bone for lossless export.
+    for br_bone in br_armature.bones:
+        if br_bone.source_hsd_flags is None:
+            continue
+        data_bone = armature_data.bones.get(br_bone.name)
+        if data_bone is not None:
+            data_bone["dat_hsd_flags"] = int(br_bone.source_hsd_flags)
+
     _build_bone_splines(br_armature, armature, logger)
 
     for key, value in br_armature.custom_props.items():
