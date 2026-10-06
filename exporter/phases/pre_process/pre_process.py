@@ -533,7 +533,15 @@ def _check_mesh_owner_disjoint(meshes_by_armature):
                         if nm in bone_names:
                             weighted.add(nm)
             mesh_weighted[m] = weighted
-            deformers |= weighted
+
+            # Imported RIGID/SINGLE_BONE meshes use Blender vertex groups only
+            # as a convenient attachment representation. They are not HSD
+            # envelope deformers, so treating those groups as such invents the
+            # owner/deformer conflict that previously added one holder JOBJ per
+            # Chibi-Robo mesh.
+            source_skin = m.get("dat_hsd_skin_type") if hasattr(m, "get") else None
+            if source_skin not in ("RIGID", "SINGLE_BONE"):
+                deformers |= weighted
 
         for m in meshes:
             if getattr(m, 'parent_type', None) == 'BONE' \
