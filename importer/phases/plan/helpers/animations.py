@@ -134,9 +134,14 @@ def build_bake_skeleton(ir_bones, ir_anim_sets=()):
     ]
     dfs_order = _parent_first_order(bones)
     seed = _scale_animated_bones(ir_anim_sets)
+    rest_closure = _scale_baked_closure(bones, dfs_order, set())
     closure = _scale_baked_closure(bones, dfs_order, seed)
-    return BRBakeSkeleton(bones=bones, dfs_order=dfs_order,
-                          scale_baked_indices=sorted(closure))
+    return BRBakeSkeleton(
+        bones=bones,
+        dfs_order=dfs_order,
+        scale_baked_indices=sorted(closure),
+        rest_scale_baked_indices=sorted(rest_closure),
+    )
 
 
 def scale_baked_indices(skeleton):
@@ -275,7 +280,8 @@ def bake_frame(skeleton, frame_srts, bake_indices):
     return targets
 
 
-def compute_bake_plan(skeleton, animated_indices):
+def compute_bake_plan(skeleton, animated_indices,
+                      scale_animated_indices=None, per_action_scale=False):
     """Decide which bones the bake must pose and group them by depth.
 
     A bone is posed if it is animated OR it is in the baked closure
@@ -290,7 +296,16 @@ def compute_bake_plan(skeleton, animated_indices):
          depth_levels[d] holds the posed bone indices at chain depth d
          (parent-before-child so build can update the pose one level at a time).
     """
-    bake = set(animated_indices) | scale_baked_indices(skeleton)
+    if per_action_scale:
+        # The armature must still use the model-wide NONE/ALIGNED partition,
+        # but only the current action's scale animation needs the expensive
+        # descendant pose bake. Rest non-uniform scale is always included.
+        action_scale = set(scale_animated_indices or ())
+        dynamic = _scale_baked_closure(
+            skeleton.bones, skeleton.dfs_order, action_scale)
+        bake = set(animated_indices) | dynamic
+    else:
+        bake = set(animated_indices) | scale_baked_indices(skeleton)
     depth = [0] * len(skeleton.bones)
     for i in skeleton.dfs_order:
         p = skeleton.bones[i].parent_index
