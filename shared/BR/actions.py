@@ -41,6 +41,10 @@ class BRBakeSkeleton:
     bones: list[BRBakeBone] = field(default_factory=list)
     dfs_order: list[int] = field(default_factory=list)
     scale_baked_indices: list[int] = field(default_factory=list)
+    # Rest-pose-only non-uniform-scale closure. Chibi-Robo import uses this
+    # together with the current action's scale tracks so actions that never
+    # animate scale do not unnecessarily bake the whole skeleton.
+    rest_scale_baked_indices: list[int] = field(default_factory=list)
 
 
 @dataclass
