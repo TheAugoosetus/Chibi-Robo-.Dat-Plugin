@@ -1,6 +1,7 @@
 """Import pipeline entry point."""
 import bpy
 import traceback
+import time
 
 try:
     from ..shared.helpers.logger import StubLogger
@@ -32,13 +33,17 @@ class Importer:
             options: dict of importer options.
             logger: Logger instance.
         """
+        pipeline_start = time.perf_counter()
+
         # Phase 1 — Container Extraction: raw file bytes → DAT bytes
         logger.info("=== Phase 1: Container Extraction ===")
+        t = time.perf_counter()
         try:
             dat_entries = extract_dat(raw_bytes, filename, options=options)
         except ValueError as error:
             logger.error("Phase 1 rejected %s: %s", filename, error)
-            logger.info("Log file: %s", logger.log_path)
+            logger.info("Timing: total import %.3fs", time.perf_counter() - pipeline_start)
+        logger.info("Log file: %s", logger.log_path)
             logger.close()
             raise ModelBuildError(filename, ValueError(
                 "No model data found in %s: %s" % (filename, error)
@@ -54,6 +59,7 @@ class Importer:
             ))
 
         logger.info("Extracted %d DAT entry(s) from %s", len(dat_entries), filename)
+        logger.info("Timing: extraction %.3fs", time.perf_counter() - t)
 
         any_succeeded = False
         errors = []
@@ -75,7 +81,9 @@ class Importer:
 
                 # Phase 2 — Section Routing: DAT bytes → section name→type map
                 logger.info("=== Phase 2: Section Routing ===")
+                t = time.perf_counter()
                 section_map = route_sections(dat_bytes, game=options.get("game"), logger=logger)
+                logger.info("Timing: routing %.3fs", time.perf_counter() - t)
 
                 # Refuse to silently produce an empty scene when nothing was
                 # routed to a known node type. The most common cause is a
@@ -98,12 +106,16 @@ class Importer:
 
                 # Phase 3 — Node Tree Parsing: DAT bytes + map → parsed node trees
                 logger.info("=== Phase 3: Node Tree Parsing ===")
+                t = time.perf_counter()
                 sections = parse_sections(dat_bytes, section_map, options, logger=logger)
                 logger.info("Parsed %d section(s)", len(sections))
+                logger.info("Timing: parse %.3fs", time.perf_counter() - t)
 
                 # Phase 4 — Scene Description: node trees → Intermediate Representation
                 options["pkx_header"] = metadata.pkx_header
+                t = time.perf_counter()
                 ir_scene = describe_scene(sections, options, logger=logger)
+                logger.info("Timing: describe %.3fs", time.perf_counter() - t)
 
                 # Phase 4b — Particle Description: GPT1 binary → IRParticleSystem
                 if metadata.gpt1_data:
@@ -116,14 +128,18 @@ class Importer:
 
                 # Phase 5a — Plan: IR → BR (Blender Representation)
                 logger.info("=== Phase 5a: Plan (IR → BR) ===")
+                t = time.perf_counter()
                 br_scene = plan_scene(ir_scene, options, logger=logger)
+                logger.info("Timing: plan %.3fs", time.perf_counter() - t)
 
                 # Phase 5b — Build: BR → Blender scene. No IR access from
                 # here on; build is a pure bpy executor.
                 if context is not None:
+                    t = time.perf_counter()
                     build_results = build_blender_scene(
                         br_scene, context, options, logger=logger,
                     )
+                    logger.info("Timing: Blender build %.3fs", time.perf_counter() - t)
 
                     # Phase 6 — Post-Processing: select animations, apply shiny, store PKX metadata
                     post_process(set(), metadata.shiny_params, options, logger=logger,
