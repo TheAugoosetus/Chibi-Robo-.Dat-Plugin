@@ -63,7 +63,11 @@ class IRModel:
     name: str
     bones: list[IRBone] = field(default_factory=list)
     meshes: list = field(default_factory=list)  # list[IRMesh]
-    bone_animations: list = field(default_factory=list)  # list[IRBoneAnimationSet]
+    bone_animations: list = field(default_factory=list)  # unique list[IRBoneAnimationSet]
+    # Original ModelSet animated_joints slot -> bone_animations index.
+    # Chibi-Robo reuses animation-root pointers heavily; this preserves that
+    # aliasing without creating hundreds of duplicate Blender Actions.
+    animation_slot_map: list[int] = field(default_factory=list)
     shape_animations: list = field(default_factory=list)  # list[IRShapeAnimationSet]
     # Constraints
     ik_constraints: list = field(default_factory=list)
