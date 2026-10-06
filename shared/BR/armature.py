@@ -32,6 +32,9 @@ class BRBone:
     use_connect: bool = False
     is_hidden: bool = False
     spline: BRBoneSpline | None = None  # JOBJ_SPLINE curve (maps only)
+    # Original HSD JOBJ flag word when imported from a DAT. Kept separately
+    # from Blender-facing state so Chibi-Robo render flags survive round-trip.
+    source_hsd_flags: int | None = None
 
 
 @dataclass
