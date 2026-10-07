@@ -9,6 +9,9 @@ BRLink keyed by socket identifier (see ``BRLink``). Plan
 "is this material LIT, what does each texture layer mean, what blend
 mode applies" interpretation lives entirely on the plan side.
 """
+import base64
+import binascii
+import hashlib
 import bpy
 
 try:
@@ -162,6 +165,40 @@ def _serialise_image(bpy_image, cache):
         scaled = np.floor(flat.astype(np.float64) * 255.0 + 0.5)
         pixels = np.clip(scaled, 0, 255).astype(np.uint8).tobytes()
 
+    source_hash = bpy_image.get("dat_hsd_source_pixel_hash")
+    source_raw_image = None
+    source_raw_palette = None
+    source_format_id = None
+    source_palette_format_id = None
+    source_palette_entry_count = 0
+
+    # The custom source payload is valid only while the editable RGBA pixels
+    # still reproduce the import-time hash. Any pixel edit automatically drops
+    # to the normal GX encoder.
+    current_hash = hashlib.sha256(pixels).hexdigest()
+    if isinstance(source_hash, str) and source_hash == current_hash:
+        try:
+            raw_image = bpy_image.get("dat_hsd_source_image_b64")
+            if isinstance(raw_image, str) and raw_image:
+                source_raw_image = base64.b64decode(raw_image, validate=True)
+            raw_palette = bpy_image.get("dat_hsd_source_palette_b64")
+            if isinstance(raw_palette, str) and raw_palette:
+                source_raw_palette = base64.b64decode(raw_palette, validate=True)
+            value = bpy_image.get("dat_hsd_source_format_id")
+            if value is not None:
+                source_format_id = int(value)
+            value = bpy_image.get("dat_hsd_source_palette_format_id")
+            if value is not None:
+                source_palette_format_id = int(value)
+            source_palette_entry_count = int(
+                bpy_image.get("dat_hsd_source_palette_entry_count", 0) or 0)
+        except (ValueError, TypeError, binascii.Error):
+            source_raw_image = None
+            source_raw_palette = None
+            source_format_id = None
+            source_palette_format_id = None
+            source_palette_entry_count = 0
+
     br_image = BRImage(
         name=bpy_image.name,
         width=width,
@@ -170,6 +207,12 @@ def _serialise_image(bpy_image, cache):
         cache_key=(key,),
         gx_format_override=getattr(bpy_image, 'dat_gx_format', 'AUTO') or 'AUTO',
         palette_format_override=getattr(bpy_image, 'dat_palette_format', 'AUTO') or 'AUTO',
+        source_raw_image_data=source_raw_image,
+        source_raw_palette_data=source_raw_palette,
+        source_format_id=source_format_id,
+        source_palette_format_id=source_palette_format_id,
+        source_palette_entry_count=source_palette_entry_count,
+        source_pixel_hash=(source_hash if source_raw_image is not None else None),
     )
     cache[key] = br_image
     return br_image
