@@ -65,6 +65,13 @@ class IRImage:
     gx_format_override: GXTextureFormat = GXTextureFormat.AUTO
     # TLUT format for indexed (C4/C8/C14X2) images; ignored otherwise.
     palette_format_override: GXPaletteFormat = GXPaletteFormat.AUTO
+    # Exact source GX payload for lossless untouched round-trip.
+    source_raw_image_data: bytes | None = None
+    source_raw_palette_data: bytes | None = None
+    source_format_id: int | None = None
+    source_palette_format_id: int | None = None
+    source_palette_entry_count: int = 0
+    source_pixel_hash: str | None = None
 
 
 @dataclass
