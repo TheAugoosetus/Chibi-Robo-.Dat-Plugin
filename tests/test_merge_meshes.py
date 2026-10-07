@@ -7,7 +7,7 @@ from shared.IR.enums import SkinType
 def _make_mesh(name, verts, faces, material=None, bone_idx=0, uvs=None,
                colors=None, normals=None, weights=None, shape_keys=None,
                is_hidden=False, cull_front=False, cull_back=False,
-               local_matrix=None, normals_are_source_local=False):
+               local_matrix=None, source_normals=None):
     return IRMesh(
         name=name,
         vertices=list(verts),
@@ -15,7 +15,9 @@ def _make_mesh(name, verts, faces, material=None, bone_idx=0, uvs=None,
         uv_layers=list(uvs) if uvs else [],
         color_layers=list(colors) if colors else [],
         normals=list(normals) if normals is not None else None,
-        normals_are_source_local=normals_are_source_local,
+        source_normals=(
+            list(source_normals) if source_normals is not None else None
+        ),
         material=material,
         bone_weights=weights,
         shape_keys=list(shape_keys) if shape_keys else None,
@@ -156,30 +158,32 @@ class TestMergeMeshes:
         assert a.vertices == before_a_verts
         assert b.vertices == before_b_verts
 
-    def test_normal_coordinate_space_mismatch_stays_separate(self):
+    def test_source_normal_presence_mismatch_stays_separate(self):
         mat = object()
-        normals = [(0.0, 0.0, 1.0)]
+        display = [(0.0, 0.0, 1.0)]
+        exact = [(31 / 64, -10 / 64, 54 / 64)]
         a = _make_mesh(
-            "local", [(0, 0, 0)], [], material=mat, normals=normals,
-            normals_are_source_local=True)
+            "exact", [(0, 0, 0)], [], material=mat, normals=display,
+            source_normals=exact)
         b = _make_mesh(
-            "world", [(1, 0, 0)], [], material=mat, normals=normals,
-            normals_are_source_local=False)
+            "edited", [(1, 0, 0)], [], material=mat, normals=display)
         out = merge_meshes([a, b])
         assert len(out) == 2
 
-    def test_normal_coordinate_space_survives_merge_seed_clone(self):
+    def test_source_normals_concatenate_when_both_pristine(self):
         mat = object()
-        normals = [(0.0, 0.0, 1.0)]
+        display = [(0.0, 0.0, 1.0)]
+        exact_a = [(31 / 64, -10 / 64, 54 / 64)]
+        exact_b = [(12 / 64, 40 / 64, 48 / 64)]
         a = _make_mesh(
-            "a", [(0, 0, 0)], [], material=mat, normals=normals,
-            normals_are_source_local=True)
+            "a", [(0, 0, 0)], [], material=mat, normals=display,
+            source_normals=exact_a)
         b = _make_mesh(
-            "b", [(1, 0, 0)], [], material=mat, normals=normals,
-            normals_are_source_local=True)
+            "b", [(1, 0, 0)], [], material=mat, normals=display,
+            source_normals=exact_b)
         out = merge_meshes([a, b])
         assert len(out) == 1
-        assert out[0].normals_are_source_local is True
+        assert out[0].source_normals == exact_a + exact_b
 
 
     def test_hidden_flag_mismatch_stays_separate(self):
