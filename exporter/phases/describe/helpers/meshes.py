@@ -11,6 +11,10 @@ BRMaterial in the parallel list that BRMesh.material_index points into.
 import math
 import re
 import json
+import base64
+import binascii
+import struct
+import zlib
 import bpy
 from mathutils import Matrix
 
@@ -286,20 +290,23 @@ def _build_submesh(mesh_name, mat_index, num_materials,
 def _pristine_source_normals(mesh_obj, logger):
     """Return exact imported HSD normals when the editable mesh is unchanged.
 
-    Blender stores custom normals as unit vectors, so simply reading
-    corner_normals cannot reproduce the original fixed-point values exactly.
-    The importer keeps those values in an internal CORNER vector attribute and
-    fingerprints the visible geometry/normal state. Any topology, position,
-    normal, or object-transform edit invalidates the shortcut.
+    Blender stores visible custom normals as unit vectors, so the exact
+    fixed-point source magnitudes are kept as compressed object metadata.
+    A post-import fingerprint covers topology, positions, effective normals,
+    and object transform. Any relevant edit invalidates this passthrough.
     """
     baseline = mesh_obj.get("dat_hsd_source_normal_fingerprint")
+    payload = mesh_obj.get("dat_hsd_source_normals_b64")
+    count = mesh_obj.get("dat_hsd_source_normal_count")
     if not isinstance(baseline, str) or not baseline:
         return None
-
-    source_attr = mesh_obj.data.attributes.get(".dat_hsd_source_normal")
-    if source_attr is None or source_attr.domain != 'CORNER':
+    if not isinstance(payload, str) or not payload:
         return None
-    if len(source_attr.data) != len(mesh_obj.data.loops):
+    try:
+        count = int(count)
+    except (TypeError, ValueError):
+        return None
+    if count != len(mesh_obj.data.loops):
         return None
 
     if mesh_normal_fingerprint(mesh_obj) != baseline:
@@ -308,10 +315,29 @@ def _pristine_source_normals(mesh_obj, logger):
             mesh_obj.name)
         return None
 
+    try:
+        raw = zlib.decompress(base64.b64decode(payload))
+    except (ValueError, binascii.Error, zlib.error):
+        logger.warning(
+            "  Mesh '%s': invalid source-normal metadata; using Blender normals",
+            mesh_obj.name)
+        return None
+
+    expected = count * 12
+    if len(raw) != expected:
+        logger.warning(
+            "  Mesh '%s': source-normal metadata size mismatch (%d != %d)",
+            mesh_obj.name, len(raw), expected)
+        return None
+
+    normals = [
+        struct.unpack_from(">fff", raw, i * 12)
+        for i in range(count)
+    ]
     logger.debug(
         "  Mesh '%s': reusing %d exact source HSD corner normals",
-        mesh_obj.name, len(source_attr.data))
-    return [tuple(item.vector) for item in source_attr.data]
+        mesh_obj.name, count)
+    return normals
 
 
 def _extract_normals(mesh_data, normal_xform):
