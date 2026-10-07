@@ -35,7 +35,11 @@ class BRMesh:
     faces: list[list[int]]
     uv_layers: list[BRUVLayer] = field(default_factory=list)
     color_layers: list[BRColorLayer] = field(default_factory=list)
+    # Editable/display normals in the mesh's presentation space.
     normals: list[tuple[float, float, float]] | None = None
+    # Optional exact DAT bind/local normals carried as preservation metadata.
+    # Build may choose not to persist this side-channel when edit validity
+    # cannot be proven (currently weighted-envelope meshes).
     source_normals: list[tuple[float, float, float]] | None = None
     vertex_groups: list[BRVertexGroup] = field(default_factory=list)
     parent_bone_name: str | None = None  # records mesh → bone ownership
