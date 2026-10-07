@@ -566,31 +566,20 @@ def _describe_texture_node(view, tex_node, layer_index, image_cache,
         scale = tuple(mapping_node.input_defaults.get('Scale', (1.0, 1.0, 1.0)))[:3]
         translation = tuple(mapping_node.input_defaults.get('Location', (0.0, 0.0, 0.0)))[:3]
 
-    repeat_s = 1
-    repeat_t = 1
-    vec_link = view.link_into(tex_node.name, 'Vector')
-    if vec_link is not None:
-        upstream_node = view.nodes_by_name.get(vec_link.from_node)
-        if (upstream_node is not None
-                and upstream_node.node_type == 'ShaderNodeVectorMath'
-                and upstream_node.properties.get('operation') == 'MULTIPLY'):
-            scale_input = upstream_node.input_defaults.get('Vector_001')
-            if scale_input is None:
-                # Blender exposes the second Vector socket either as the
-                # name 'Vector' (duplicate) or as 'Vector_001' depending
-                # on version. Walk the input_defaults for the second hit.
-                second = None
-                count = 0
-                for k, v in upstream_node.input_defaults.items():
-                    if k.startswith('Vector'):
-                        count += 1
-                        if count == 2:
-                            second = v
-                            break
-                scale_input = second
-            if scale_input is not None and hasattr(scale_input, '__len__') and len(scale_input) >= 2:
-                repeat_s = max(1, int(round(scale_input[0])))
-                repeat_t = max(1, int(round(scale_input[1])))
+        if coord_type == CoordType.REFLECTION:
+            # Import intentionally subtracts pi/2 on X so HSD reflection
+            # coordinates line up with Blender's Reflection vector. Undo that
+            # display-space adjustment when reconstructing the game TObj.
+            #
+            # Without this inverse, stock sample.dat rotation (0,0,0) became
+            # (-pi/2,0,0) in icon_sample.dat after the old round trip.
+            rotation = (
+                rotation[0] + math.pi / 2,
+                rotation[1],
+                rotation[2],
+            )
+
+    repeat_s, repeat_t = _detect_repeat_counts(view, tex_node, mapping_node)
 
     wrap_s, wrap_t = _detect_per_axis_wrap(view, tex_node)
     if wrap_s is None or wrap_t is None:
@@ -636,6 +625,51 @@ def _describe_texture_node(view, tex_node, layer_index, image_cache,
         blend_factor=blend_factor,
         lightmap_channel=lightmap_channel,
         is_bump=is_bump,
+    )
+
+
+def _detect_repeat_counts(view, tex_node, mapping_node=None):
+    """Recover the importer's UV repeat multiplier.
+
+    The importer wires repeat as UV/Reflection -> VectorMath(MULTIPLY) ->
+    Mapping -> texture. The previous exporter only inspected the texture's
+    immediate Vector input, which is usually the Mapping node, so stock
+    repeat_s=3 in sample.dat silently became 1 after round-trip.
+    """
+    candidate = None
+
+    if mapping_node is not None:
+        link = view.link_into(mapping_node.name, 'Vector')
+        if link is not None:
+            candidate = view.nodes_by_name.get(link.from_node)
+
+    if candidate is None:
+        link = view.link_into(tex_node.name, 'Vector')
+        if link is not None:
+            candidate = view.nodes_by_name.get(link.from_node)
+
+    if (candidate is None
+            or candidate.node_type != 'ShaderNodeVectorMath'
+            or candidate.properties.get('operation') != 'MULTIPLY'):
+        return 1, 1
+
+    scale_input = candidate.input_defaults.get('Vector_001')
+    if scale_input is None:
+        vectors = [
+            value for key, value in candidate.input_defaults.items()
+            if str(key).startswith('Vector')
+        ]
+        if len(vectors) >= 2:
+            scale_input = vectors[1]
+
+    if (scale_input is None
+            or not hasattr(scale_input, '__len__')
+            or len(scale_input) < 2):
+        return 1, 1
+
+    return (
+        max(1, int(round(scale_input[0]))),
+        max(1, int(round(scale_input[1]))),
     )
 
 
