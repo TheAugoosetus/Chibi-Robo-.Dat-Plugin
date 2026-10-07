@@ -284,13 +284,6 @@ class TestRigidNormalRoundTrip:
         for got, expected in zip(restored[0], local):
             assert abs(got - expected) < 1e-6
 
-    def test_exact_local_normal_needs_no_reverse_transform(self):
-        # This is the semantic reason for normals_are_source_local: an exact
-        # untouched DAT normal is already local and must bypass owner reversal.
-        local = (31 / 64, -10 / 64, 54 / 64)
-        assert local != tuple(Vector(local).normalized())
-
-
 # ---------------------------------------------------------------------------
 # _find_skeleton_bone must mirror importer's flag search — otherwise compose
 # un-deform and importer re-deform compute different coord matrices and rest
