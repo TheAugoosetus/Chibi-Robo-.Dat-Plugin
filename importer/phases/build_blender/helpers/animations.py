@@ -109,7 +109,10 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
 
 def _encode_source_hsd_animation(snapshot):
     """Encode the raw-byte animation snapshot into a Blender ID-property string."""
-    out = {"bones": []}
+    out = {
+        "bones": [],
+        "loop": bool(snapshot.get("loop", False)),
+    }
     for entry in snapshot.get("bones", []):
         if entry is None:
             out["bones"].append(None)
