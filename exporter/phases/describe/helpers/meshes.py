@@ -109,6 +109,11 @@ def describe_meshes(armature, br_armature, logger=StubLogger(), image_cache=None
 _COORD_ROTATION_INV = Matrix.Rotation(math.pi / 2, 4, [1.0, 0.0, 0.0]).inverted()
 
 
+def _normal_matrix_for_transform(vertex_xform):
+    """Return the inverse-transpose 3x3 for transforming surface normals."""
+    return vertex_xform.to_3x3().inverted().transposed()
+
+
 def _describe_mesh_object(mesh_obj, bone_names, logger,
                           material_cache, image_cache):
     """Extract one Blender mesh into one or more BRMesh (split per material).
@@ -128,7 +133,10 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
     # it back out. Either way the captured vertices land in GameCube
     # Y-up world space.
     vertex_xform = _COORD_ROTATION_INV @ mesh_obj.matrix_world
-    normal_xform = (_COORD_ROTATION_INV @ mesh_obj.matrix_world).to_3x3()
+    # Normals are directions, not positions. Under non-uniform object scale
+    # they must use inverse(vertex_xform)^T; multiplying by the raw 3x3 would
+    # skew lighting and reflection coordinates toward the stretched axis.
+    normal_xform = _normal_matrix_for_transform(vertex_xform)
 
     all_vertices = [tuple(vertex_xform @ v.co) for v in mesh_data.vertices]
     if not all_vertices:
