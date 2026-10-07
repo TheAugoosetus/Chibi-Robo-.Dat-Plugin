@@ -296,6 +296,16 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
                 tuple(world_inv @ Vector(v)) for v in ir_mesh.vertices
             ]
 
+    # Envelope normals follow the same bind/world split as envelope
+    # positions, but use inverse-transpose matrices. Import describe has
+    # already moved them into the deformed world frame for Blender; reverse
+    # that here before writing the DAT normal stream.
+    export_normals = ir_mesh.normals
+    if is_envelope and ir_mesh.normals and bones:
+        export_normals = _undeform_normals(
+            ir_mesh.normals, ir_mesh.faces, envelope_map,
+            bones, bone_name_to_index, ir_mesh.parent_bone_index)
+
 
     # Vertices are already in GC units — the pre-scale pass in compose_scene
     # converted the whole IRScene from meters to GC units once up front.
@@ -323,10 +333,10 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     # Normals — per-loop, need to de-duplicate into indexed buffer. Preserve
     # Chibi-Robo's compact S8 fixed-point normals when possible; this matters
     # for both file size and reflection-coordinate generation.
-    if ir_mesh.normals:
+    if export_normals:
         nrm_fmt = _source_vertex_format(ir_mesh, GX_VA_NRM)
         nrm_encoded = _encode_indexed_source_numeric(
-            ir_mesh.normals, nrm_fmt, expected_components=3)
+            export_normals, nrm_fmt, expected_components=3)
         if nrm_encoded is not None:
             nrm_verts, nrm_indices, nrm_buffer = nrm_encoded
             nrm_desc = _make_vertex_desc_from_source(
@@ -337,7 +347,7 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
                 logger.warning(
                     "      pobj '%s': edited normals no longer fit source GX "
                     "format; falling back to F32", ir_mesh.name)
-            nrm_verts, nrm_indices, nrm_buffer = _encode_indexed_float3(ir_mesh.normals)
+            nrm_verts, nrm_indices, nrm_buffer = _encode_indexed_float3(export_normals)
             nrm_desc = _make_vertex_desc(GX_VA_NRM, GX_NRM_XYZ, GX_F32, stride=12)
         nrm_desc.raw_vertex_data = nrm_buffer
         vertex_descs.append(nrm_desc)
@@ -557,6 +567,53 @@ def _build_split_pobjs(ir_mesh, envelope_map, vertex_descs, vertex_buffers,
 # Envelope (WEIGHTED skinning) helpers
 # ---------------------------------------------------------------------------
 
+def _export_envelope_deform_matrices(
+        envelope_map, bones, bone_name_to_index, parent_bone_index):
+    """Rebuild the forward envelope matrices implied by the stored weights.
+
+    This is the exporter-side mirror of importer describe's
+    _compute_envelope_deform_matrices(). Positions invert these matrices;
+    normals invert the importer's inverse-transpose normal matrix, which is
+    simply the transpose of the forward deformation matrix.
+    """
+    try:
+        from .....shared.Constants.hsd import JOBJ_SKELETON_ROOT
+    except (ImportError, SystemError):
+        from shared.Constants.hsd import JOBJ_SKELETON_ROOT
+
+    env_combos = envelope_map['envelopes']
+    coord = _envelope_coord_system(
+        parent_bone_index, bones, JOBJ_SKELETON_ROOT)
+
+    deform = []
+    for weight_list in env_combos:
+        # Runtime short-circuit in _modelParseLoadEnvelopeMatrix: when an
+        # envelope has a single bone at weight >= 1.0 AND the mesh has no
+        # coord matrix (parented to SKELETON_ROOT), the per-envelope matrix
+        # is just joint.matrix — the IBM is omitted.
+        if (coord is None
+                and len(weight_list) == 1
+                and abs(weight_list[0][1] - 1.0) < 1e-6):
+            bone_idx = bone_name_to_index.get(weight_list[0][0], 0)
+            matrix = Matrix(bones[bone_idx].world_matrix)
+        else:
+            matrix = Matrix([[0] * 4 for _ in range(4)])
+            for bone_name, weight in weight_list:
+                bone_idx = bone_name_to_index.get(bone_name, 0)
+                bone = bones[bone_idx]
+                bone_world = Matrix(bone.world_matrix)
+                bone_ibm = _get_invbind_matrix(bone_idx, bones)
+                contrib = bone_world @ bone_ibm
+                for i in range(4):
+                    for j in range(4):
+                        matrix[i][j] += weight * contrib[i][j]
+            if coord:
+                matrix = matrix @ coord
+        deform.append(matrix)
+
+    return deform
+
+
 def _undeform_vertices(vertices, envelope_map, bones, bone_name_to_index,
                        parent_bone_index, logger):
     """Reverse the envelope deformation applied by the describe phase.
@@ -572,60 +629,61 @@ def _undeform_vertices(vertices, envelope_map, bones, bone_name_to_index,
     the runtime re-deforms them with the stored envelope and they land at
     the wrong world position.
     """
-    try:
-        from .....shared.Constants.hsd import JOBJ_SKELETON_ROOT
-    except (ImportError, SystemError):
-        from shared.Constants.hsd import JOBJ_SKELETON_ROOT
-
     vertex_to_env = envelope_map['vertex_to_env']
-    env_combos = envelope_map['envelopes']
+    deform = _export_envelope_deform_matrices(
+        envelope_map, bones, bone_name_to_index, parent_bone_index)
 
-    # Compute envelope coordinate system (mirrors describe phase)
-    coord = _envelope_coord_system(parent_bone_index, bones, JOBJ_SKELETON_ROOT)
-
-    # Compute inverse deformation matrix per envelope
     inv_deform = []
-    for weight_list in env_combos:
-        # Runtime short-circuit in _modelParseLoadEnvelopeMatrix: when an
-        # envelope has a single bone at weight >= 1.0 AND the mesh has no
-        # coord matrix (parented to SKELETON_ROOT), the per-envelope
-        # matrix is just joint.matrix — the IBM is omitted. Mirror that
-        # here, otherwise vertices weighted entirely to one bone end up
-        # offset by the IBM factor the runtime never applied.
-        if (coord is None
-                and len(weight_list) == 1
-                and abs(weight_list[0][1] - 1.0) < 1e-6):
-            bone_idx = bone_name_to_index.get(weight_list[0][0], 0)
-            matrix = Matrix(bones[bone_idx].world_matrix)
-        else:
-            zero = [[0] * 4 for _ in range(4)]
-            matrix = Matrix(zero)
-
-            for bone_name, weight in weight_list:
-                bone_idx = bone_name_to_index.get(bone_name, 0)
-                bone = bones[bone_idx]
-                bone_world = Matrix(bone.world_matrix)
-                bone_ibm = _get_invbind_matrix(bone_idx, bones)
-                contrib = bone_world @ bone_ibm
-                for i in range(4):
-                    for j in range(4):
-                        matrix[i][j] += weight * contrib[i][j]
-
-            if coord:
-                matrix = matrix @ coord
-
+    for matrix in deform:
         try:
             inv_deform.append(matrix.inverted())
         except (ValueError, ZeroDivisionError):
-            inv_deform.append(Matrix([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]))
+            inv_deform.append(
+                Matrix([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]))
 
-    # Apply inverse deformation to each vertex
     result = list(vertices)
     for vertex_idx, env_idx in vertex_to_env.items():
         if vertex_idx < len(result) and env_idx < len(inv_deform):
             old_pos = result[vertex_idx]
             new_pos = inv_deform[env_idx] @ Vector(old_pos)
             result[vertex_idx] = (new_pos[0], new_pos[1], new_pos[2])
+
+    return result
+
+
+def _undeform_normals(normals, faces, envelope_map, bones,
+                      bone_name_to_index, parent_bone_index):
+    """Move deformed per-loop normals back into HSD bind/local space.
+
+    Import applies N = inverse(M)^T to each DAT normal, where M is that
+    vertex envelope's forward deformation matrix. Therefore export reverses
+    the operation with inverse(N) = M^T. Normals are directions, so only the
+    3x3 linear part participates and the result is normalized.
+    """
+    vertex_to_env = envelope_map['vertex_to_env']
+    deform = _export_envelope_deform_matrices(
+        envelope_map, bones, bone_name_to_index, parent_bone_index)
+
+    reverse_normal = []
+    for matrix in deform:
+        nm = matrix.to_3x3()
+        nm.transpose()
+        reverse_normal.append(nm.to_4x4())
+
+    result = list(normals)
+    loop_idx = 0
+    for face in faces:
+        for vertex_idx in face:
+            if loop_idx >= len(result):
+                return result
+            env_idx = vertex_to_env.get(vertex_idx)
+            if env_idx is not None and env_idx < len(reverse_normal):
+                restored = (
+                    reverse_normal[env_idx] @ Vector(result[loop_idx])
+                ).normalized()
+                result[loop_idx] = (
+                    restored[0], restored[1], restored[2])
+            loop_idx += 1
 
     return result
 
