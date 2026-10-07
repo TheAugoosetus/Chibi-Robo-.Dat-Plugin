@@ -51,10 +51,6 @@ class BRMesh:
     # Source GX vertex descriptor metadata (JSON-safe dicts). Blender has no
     # native concept of component_frac / S8 / S16 vertex-buffer packing.
     source_vertex_formats: list[dict] = field(default_factory=list)
-    # True only when `normals` came directly from untouched exact DAT
-    # metadata and are already in the source PObject's bind/local space.
-    # False means the normals are editable presentation/world-space values.
-    normals_are_source_local: bool = False
 
 
 @dataclass
