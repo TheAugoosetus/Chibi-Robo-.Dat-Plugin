@@ -87,10 +87,18 @@ def plan_material(br_material, logger=StubLogger(), image_cache=None,
 
     shininess, enable_specular = _extract_specular_settings(principled)
 
+    routing_pristine = bool(
+        getattr(br_material, 'source_routing_pristine', False))
     color_source, alpha_source = _detect_color_sources(
         view,
-        source_color_source=getattr(br_material, 'source_color_source', None),
-        source_alpha_source=getattr(br_material, 'source_alpha_source', None),
+        source_color_source=(
+            getattr(br_material, 'source_color_source', None)
+            if routing_pristine else None
+        ),
+        source_alpha_source=(
+            getattr(br_material, 'source_alpha_source', None)
+            if routing_pristine else None
+        ),
     )
     texture_layers = _extract_texture_layers(
         view, logger, image_cache, uv_layer_names,
