@@ -151,7 +151,8 @@ def _describe_pobj(pobj, joint, bone_index, count,
     face_lists_copy, faces = _validated_face_lists(pobj, pos_idx, count, logger, options)
     verts_out = [tuple(c * GC_TO_METERS for c in v) for v in pobj.sources[pos_idx]]
 
-    uv_layers, color_layers, normals = _collect_attribute_layers(pobj, face_lists_copy, faces)
+    uv_layers, color_layers, normals, source_normals = _collect_attribute_layers(
+        pobj, face_lists_copy, faces)
     color_layers = _fabricate_missing_color_layers(color_layers, faces, options, pobj.address, logger)
 
     bone_weights = _extract_bone_weights(
@@ -181,6 +182,7 @@ def _describe_pobj(pobj, joint, bone_index, count,
         uv_layers=uv_layers,
         color_layers=color_layers,
         normals=normals,
+        source_normals=source_normals,
         material=ir_material,
         bone_weights=bone_weights,
         is_hidden=bool(joint.flags & JOBJ_HIDDEN),
@@ -212,24 +214,33 @@ def _collect_attribute_layers(pobj, face_lists_copy, faces):
     """Collect UV / color / normal layers from a PObject's vertex attributes.
 
     In: pobj (PObject, parsed); face_lists_copy (list[list[list[int]]], one per attribute); faces (list[list[int]], position faces).
-    Out: tuple (uv_layers: list[IRUVLayer], color_layers: list[IRColorLayer], normals: list[tuple]|None).
+    Out: tuple (uv_layers, color_layers, display_normals, source_normals).
+        display_normals are unit vectors suitable for Blender. source_normals
+        retain the exact decoded fixed-point values from the DAT so an
+        untouched mesh can re-quantize to the original bytes.
     """
     uv_layers = []
     color_layers = []
     normals = None
+    source_normals = None
     for i, vertex in enumerate(pobj.vertex_list.vertices):
         if vertex.isTexture():
             tex_idx = vertex.attribute - GX_VA_TEX0
             uv_layers.append(_extract_uv_layer(pobj.sources[i], face_lists_copy[i], faces, tex_idx))
         elif vertex.attribute in (GX_VA_NRM, GX_VA_NBT):
-            normals = _extract_normals(pobj.sources[i], face_lists_copy[i], faces,
-                                       is_nbt=(vertex.attribute == GX_VA_NBT))
+            is_nbt = vertex.attribute == GX_VA_NBT
+            source_normals = _extract_normals(
+                pobj.sources[i], face_lists_copy[i], faces,
+                is_nbt=is_nbt, normalize=False)
+            normals = _extract_normals(
+                pobj.sources[i], face_lists_copy[i], faces,
+                is_nbt=is_nbt, normalize=True)
         elif vertex.attribute in (GX_VA_CLR0, GX_VA_CLR1):
             color_num = '0' if vertex.attribute == GX_VA_CLR0 else '1'
             cl, al = _extract_color_layers(pobj.sources[i], face_lists_copy[i], faces, color_num)
             color_layers.append(cl)
             color_layers.append(al)
-    return uv_layers, color_layers, normals
+    return uv_layers, color_layers, normals, source_normals
 
 
 def _fabricate_missing_color_layers(color_layers, faces, options, pobj_addr, logger):
@@ -301,11 +312,19 @@ def _extract_uv_layer(source, face_list, faces, tex_index):
     return IRUVLayer(name=f'uvtex_{tex_index}', uvs=uvs)
 
 
-def _extract_normals(source, face_list, faces, is_nbt=False):
-    """Extract per-loop normals as unit-length 3-tuples.
+def _extract_normals(source, face_list, faces, is_nbt=False, normalize=True):
+    """Extract per-loop normal 3-tuples.
 
-    In: source (sequence of normal vectors or NBT triples); face_list (list[list[int]]); faces (list[list[int]]); is_nbt (bool, True drops binormal/tangent).
-    Out: list[tuple[float,float,float]], one per loop, normalized.
+    With normalize=True the vectors are unit-length for Blender. With
+    normalize=False their exact decoded HSD fixed-point magnitudes are
+    retained. Both representations are needed: Blender wants unit normals,
+    while a lossless no-edit DAT round-trip must not change fixed-point
+    values merely because the importer normalized them.
+
+    In: source (sequence of normal vectors or NBT triples); face_list
+        (list[list[int]]); faces (list[list[int]]); is_nbt (bool);
+        normalize (bool).
+    Out: list[tuple[float,float,float]], one per loop.
     """
     normals = []
     for face_id, face in enumerate(faces):
@@ -316,7 +335,7 @@ def _extract_normals(source, face_list, faces, is_nbt=False):
             if is_nbt:
                 n = n[0:3]  # Take only normal, skip binormal/tangent
             v = Vector(n)
-            if v.length > 0:
+            if normalize and v.length > 0:
                 v.normalize()
             normals.append(tuple(v))
     return normals
