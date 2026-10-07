@@ -63,6 +63,17 @@ def build_meshes(br_model, armature, context, logger=StubLogger()):
         # baked geometry about the template whenever those bones are posed.
         copy.data = copy.data.copy()
         copy.data.transform(Matrix(instance.matrix_local))
+        # The instance has just baked a different placement into its geometry.
+        # Exact source normals from the template PObject are therefore no
+        # longer valid for this copy. Let export use the transformed Blender
+        # normals rather than incorrectly restoring the template stream.
+        for key in (
+            "dat_hsd_source_normals_b64",
+            "dat_hsd_source_normal_count",
+            "dat_hsd_source_normal_fingerprint",
+        ):
+            if key in copy:
+                del copy[key]
         for modifier in list(copy.modifiers):
             if modifier.type == 'ARMATURE':
                 copy.modifiers.remove(modifier)
