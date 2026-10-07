@@ -23,10 +23,14 @@ import bpy
 
 try:
     from ....shared.helpers.logger import StubLogger
-    from ....shared.helpers.blender_fingerprint import mesh_normal_fingerprint
+    from ....shared.helpers.blender_fingerprint import (
+        armature_rest_fingerprint, mesh_normal_fingerprint,
+    )
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
-    from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
+    from shared.helpers.blender_fingerprint import (
+        armature_rest_fingerprint, mesh_normal_fingerprint,
+    )
 
 
 _COLO_XD_KIND_TO_MODEL_TYPE = {
@@ -73,6 +77,11 @@ def post_process(armature_names, shiny_params=None, options=None, logger=StubLog
             if obj is not None and obj.type == 'ARMATURE'
         ]
     bake_imported_transforms(bake_targets, logger=logger)
+    # Source-preservation baselines must describe the *final* editable rest
+    # state. Armature.transform() above rewrites armature-space bone matrices,
+    # so the pre-bake skeleton fingerprint created during build would make an
+    # untouched Chibi import look edited at export time.
+    _stamp_source_skeleton_fingerprints(bake_targets, logger)
     _stamp_source_normal_fingerprints(bake_targets, logger)
 
     if build_results:
@@ -127,6 +136,34 @@ def post_process(armature_names, shiny_params=None, options=None, logger=StubLog
                     start, end, len(ranges))
     scene.frame_set(scene.frame_start)
     logger.info("=== Phase 6 complete ===")
+
+
+def _stamp_source_skeleton_fingerprints(armatures, logger=StubLogger()):
+    """Refresh Chibi source-animation rest-state baselines after import bake.
+
+    build_blender records a provisional fingerprint before Phase 6 so direct
+    build→describe tests can still validate preservation without post-process.
+    Production import then bakes the Y-up viewing transform into armature data;
+    that changes Bone.matrix_local values even though the user edited nothing.
+    Re-stamp here so later export compares against the canonical post-bake rest
+    skeleton the user actually received.
+    """
+    count = 0
+    for arm in armatures:
+        if arm is None or getattr(arm, "type", None) != "ARMATURE":
+            continue
+        if arm.get("dat_game_origin") != "CHIBI_ROBO":
+            continue
+        if not arm.get("dat_hsd_source_skeleton_fingerprint"):
+            continue
+        arm["dat_hsd_source_skeleton_fingerprint"] = (
+            armature_rest_fingerprint(arm)
+        )
+        count += 1
+    if count:
+        logger.debug(
+            "  Refreshed source-skeleton fingerprints on %d Chibi armature(s)",
+            count)
 
 
 def _stamp_source_normal_fingerprints(armatures, logger=StubLogger()):
