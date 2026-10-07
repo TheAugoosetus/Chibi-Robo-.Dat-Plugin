@@ -88,8 +88,7 @@ class TestNormalMatrixMath:
         """Identity deform matrix should leave normals unchanged."""
         dm = Matrix.Identity(4)
         nm = dm.to_3x3()
-        nm.invert()
-        nm.transpose()
+        nm = nm.inverted().transposed()
         n = Vector((0, 1, 0))
         result = (nm.to_4x4() @ n).normalized()
         assert abs(result.x) < 1e-6
@@ -103,8 +102,7 @@ class TestNormalMatrixMath:
         dm[1][1] = 2.0
         dm[2][2] = 2.0
         nm = dm.to_3x3()
-        nm.invert()
-        nm.transpose()
+        nm = nm.inverted().transposed()
         n = Vector((0, 0, 1))
         result = (nm.to_4x4() @ n).normalized()
         assert abs(result.x) < 1e-6
@@ -118,8 +116,7 @@ class TestNormalMatrixMath:
         # A diagonal (1,1,0) normal on a surface stretched in X
         # should tilt toward Y (away from the stretch)
         nm = dm.to_3x3()
-        nm.invert()
-        nm.transpose()
+        nm = nm.inverted().transposed()
         n = Vector((1, 1, 0)).normalized()
         result = (nm.to_4x4() @ n).normalized()
         # After inverse-transpose of scale(2,1,1), the X component should be halved
@@ -131,8 +128,7 @@ class TestNormalMatrixMath:
         angle = math.pi / 2  # 90 degrees around Z
         dm = Matrix.Rotation(angle, 4, 'Z')
         nm = dm.to_3x3()
-        nm.invert()
-        nm.transpose()
+        nm = nm.inverted().transposed()
         n = Vector((1, 0, 0))
         result = (nm.to_4x4() @ n).normalized()
         # (1,0,0) rotated 90° around Z → (0,1,0)
@@ -147,8 +143,7 @@ class TestNormalMatrixMath:
         dm[1][3] = 200.0
         dm[2][3] = 300.0
         nm = dm.to_3x3()  # 3x3 strips translation
-        nm.invert()
-        nm.transpose()
+        nm = nm.inverted().transposed()
         n = Vector((0, 1, 0))
         result = (nm.to_4x4() @ n).normalized()
         assert abs(result.x) < 1e-6
