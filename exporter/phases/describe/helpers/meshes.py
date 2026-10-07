@@ -186,6 +186,10 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
             # object. _build_submesh deliberately does not know about bpy
             # objects, so attach this metadata here at the object boundary.
             br_mesh.source_skin_type = mesh_obj.get("dat_hsd_skin_type")
+            # _pristine_source_normals returns the untouched DAT payload
+            # verbatim. Those vectors are already in PObject-local space;
+            # the editable fallback from _extract_normals is GC-world-space.
+            br_mesh.normals_are_source_local = source_normals is not None
             raw_formats = mesh_obj.get("dat_hsd_vertex_formats")
             if isinstance(raw_formats, str) and raw_formats:
                 try:
