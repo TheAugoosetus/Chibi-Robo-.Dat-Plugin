@@ -7,7 +7,7 @@ from shared.IR.enums import SkinType
 def _make_mesh(name, verts, faces, material=None, bone_idx=0, uvs=None,
                colors=None, normals=None, weights=None, shape_keys=None,
                is_hidden=False, cull_front=False, cull_back=False,
-               local_matrix=None):
+               local_matrix=None, normals_are_source_local=False):
     return IRMesh(
         name=name,
         vertices=list(verts),
@@ -15,6 +15,7 @@ def _make_mesh(name, verts, faces, material=None, bone_idx=0, uvs=None,
         uv_layers=list(uvs) if uvs else [],
         color_layers=list(colors) if colors else [],
         normals=list(normals) if normals is not None else None,
+        normals_are_source_local=normals_are_source_local,
         material=material,
         bone_weights=weights,
         shape_keys=list(shape_keys) if shape_keys else None,
@@ -154,6 +155,32 @@ class TestMergeMeshes:
         merge_meshes([a, b])
         assert a.vertices == before_a_verts
         assert b.vertices == before_b_verts
+
+    def test_normal_coordinate_space_mismatch_stays_separate(self):
+        mat = object()
+        normals = [(0.0, 0.0, 1.0)]
+        a = _make_mesh(
+            "local", [(0, 0, 0)], [], material=mat, normals=normals,
+            normals_are_source_local=True)
+        b = _make_mesh(
+            "world", [(1, 0, 0)], [], material=mat, normals=normals,
+            normals_are_source_local=False)
+        out = merge_meshes([a, b])
+        assert len(out) == 2
+
+    def test_normal_coordinate_space_survives_merge_seed_clone(self):
+        mat = object()
+        normals = [(0.0, 0.0, 1.0)]
+        a = _make_mesh(
+            "a", [(0, 0, 0)], [], material=mat, normals=normals,
+            normals_are_source_local=True)
+        b = _make_mesh(
+            "b", [(1, 0, 0)], [], material=mat, normals=normals,
+            normals_are_source_local=True)
+        out = merge_meshes([a, b])
+        assert len(out) == 1
+        assert out[0].normals_are_source_local is True
+
 
     def test_hidden_flag_mismatch_stays_separate(self):
         mat = object()
