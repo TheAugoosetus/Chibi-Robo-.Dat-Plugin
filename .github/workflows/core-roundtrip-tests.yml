@@ -35,3 +35,4 @@ jobs:
           tests/test_describe_normals_export.py
           tests/test_build_mesh_instances.py
           tests/test_mesh_normal_fingerprint.py
+          tests/test_chibi_robo_source_animation.py
