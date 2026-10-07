@@ -19,6 +19,12 @@ class BRImage:
     pack: bool = True
     gx_format_override: str | None = None  # stored on bpy_image.dat_gx_format
     palette_format_override: str | None = None  # stored on bpy_image.dat_palette_format
+    source_raw_image_data: bytes | None = None
+    source_raw_palette_data: bytes | None = None
+    source_format_id: int | None = None
+    source_palette_format_id: int | None = None
+    source_palette_entry_count: int = 0
+    source_pixel_hash: str | None = None
 
 
 @dataclass
