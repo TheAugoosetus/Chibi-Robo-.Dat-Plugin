@@ -150,6 +150,62 @@ def test_exact_rigid_local_normal_bypasses_owner_reverse_transform():
     assert nrm_desc.raw_vertex_data == bytes((31, 246, 54))
 
 
+def test_exact_weighted_source_normal_bypasses_envelope_rebuild():
+    source = (31 / 64, -10 / 64, 54 / 64)
+    fmt = {
+        "attribute": GX_VA_NRM,
+        "attribute_type": GX_INDEX8,
+        "component_count": GX_NRM_XYZ,
+        "component_type": GX_S8,
+        "component_frac": 6,
+        "stride": 3,
+    }
+    mesh = IRMesh(
+        name="weighted_exact",
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 2]],
+        # Deliberately different editable/deformed normals. If compose ignores
+        # source_normals, the emitted fixed-point bytes will not match source.
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        source_normals=[source, source, source],
+        bone_weights=IRBoneWeights(
+            type=SkinType.WEIGHTED,
+            assignments=[
+                (0, [("root", 1.0)]),
+                (1, [("root", 1.0)]),
+                (2, [("root", 1.0)]),
+            ],
+        ),
+        parent_bone_index=0,
+        source_vertex_formats=[fmt],
+    )
+    owner_world = [
+        [2.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    bones = [SimpleNamespace(
+        world_matrix=owner_world,
+        inverse_bind_matrix=None,
+        parent_index=None,
+        flags=0,
+    )]
+    joints = [SimpleNamespace()]
+
+    pobjs = _build_pobj(mesh, joints, bones, {"root": 0}, _Logger())
+    nrm_desc = next(
+        desc for desc in pobjs[0].vertex_list.vertices
+        if desc.attribute == GX_VA_NRM
+    )
+
+    assert nrm_desc.raw_vertex_data == bytes((31, 246, 54))
+
+
 def _routing_view(diffuse=(1.0, 1.0, 1.0, 1.0), alpha=1.0):
     nodes = [
         BRNode(
