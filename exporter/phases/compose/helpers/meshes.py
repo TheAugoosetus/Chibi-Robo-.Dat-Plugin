@@ -666,8 +666,7 @@ def _undeform_normals(normals, faces, envelope_map, bones,
 
     reverse_normal = []
     for matrix in deform:
-        nm = matrix.to_3x3()
-        nm.transpose()
+        nm = matrix.to_3x3().transposed()
         reverse_normal.append(nm.to_4x4())
 
     result = list(normals)
