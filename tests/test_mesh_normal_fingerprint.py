@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+from shared.Constants.hsd import JOBJ_LIGHTING, JOBJ_SKELETON
 from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 
 
@@ -99,5 +100,12 @@ def test_normal_fingerprint_changes_when_rest_bone_matrix_changes():
 def test_normal_fingerprint_changes_when_hsd_skeleton_flags_change():
     obj = _MeshObject()
     before = mesh_normal_fingerprint(obj)
-    obj.bone._props["dat_hsd_flags"] = 0x20
+    obj.bone._props["dat_hsd_flags"] = JOBJ_SKELETON
     assert mesh_normal_fingerprint(obj) != before
+
+
+def test_normal_fingerprint_ignores_render_only_hsd_flag_changes():
+    obj = _MeshObject()
+    before = mesh_normal_fingerprint(obj)
+    obj.bone._props["dat_hsd_flags"] = JOBJ_LIGHTING
+    assert mesh_normal_fingerprint(obj) == before
