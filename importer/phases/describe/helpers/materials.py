@@ -3,6 +3,8 @@
 Extracts render_mode flags, material colors, texture chain parameters,
 and decoded image pixel data into IR dataclasses without any bpy calls.
 """
+import hashlib
+
 try:
     from .....shared.IR.material import (
         IRMaterial, IRTextureLayer, IRImage, FragmentBlending,
@@ -282,15 +284,30 @@ def _build_ir_image(texture):
     palette_format = (_palette_format_id_to_enum(texture.palette.format)
                       if texture.palette else GXPaletteFormat.AUTO)
 
+    pixel_bytes = bytes(pixel_data)
+    palette = texture.palette
     return IRImage(
         name=f"tex_{image_node.address:X}",
         width=width,
         height=height,
-        pixels=bytes(pixel_data),
+        pixels=pixel_bytes,
         image_id=image_node.address,
-        palette_id=texture.palette.address if texture.palette else 0,
+        palette_id=palette.address if palette else 0,
         gx_format_override=gx_format,
         palette_format_override=palette_format,
+        source_raw_image_data=bytes(
+            getattr(image_node, "raw_image_data", b"") or b""),
+        source_raw_palette_data=(
+            bytes(getattr(palette, "raw_data", b"") or b"")
+            if palette else None
+        ),
+        source_format_id=int(image_node.format),
+        source_palette_format_id=(int(palette.format) if palette else None),
+        source_palette_entry_count=(
+            int(getattr(palette, "entry_count", 0) or 0)
+            if palette else 0
+        ),
+        source_pixel_hash=hashlib.sha256(pixel_bytes).hexdigest(),
     )
 
 
