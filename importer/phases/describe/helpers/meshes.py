@@ -626,9 +626,7 @@ def _deform_normals_by_envelope(normals, deform_matrices, indices, faces):
     """
     normal_matrices = []
     for dm in deform_matrices:
-        nm = dm.to_3x3()
-        nm.invert()
-        nm.transpose()
+        nm = dm.to_3x3().inverted().transposed()
         normal_matrices.append(nm.to_4x4())
 
     out = list(normals)
