@@ -135,17 +135,14 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
     # values as compressed object metadata. Post-process stamps the edit
     # fingerprint only after its coordinate-system bake has finished.
     #
-    # Deliberately persist this exact side-channel only for
-    # RIGID/SINGLE_BONE. WEIGHTED display normals are envelope-deformed for
-    # Blender, while source_normals remain original DAT bind/local vectors.
-    # Our current edit fingerprint covers mesh geometry/normals/transform but
-    # not vertex-group weights or armature bind matrices, so it cannot yet
-    # prove a weighted source payload is still valid after editing. Weighted
-    # Blender exports therefore rebuild bind-space normals from the editable
-    # deformed normals; direct IR/node round-trips may still reuse the exact
-    # source channel because no Blender edit boundary was crossed.
+    # Preserve the exact source side-channel for every imported HSD skin
+    # mode. Post-process fingerprints the finished Blender mesh *plus* its
+    # skinning context (owner, weights, rest skeleton, HSD skeleton flags).
+    # Export reuses this payload only while that full fingerprint still
+    # matches; any weighted/rigid coordinate-space edit therefore falls back
+    # to rebuilding normals from Blender's editable display representation.
     if (br_mesh.source_normals
-            and br_mesh.source_skin_type in ("RIGID", "SINGLE_BONE")
+            and br_mesh.source_skin_type in ("RIGID", "SINGLE_BONE", "WEIGHTED")
             and len(br_mesh.source_normals) == len(mesh_data.loops)):
         raw = bytearray()
         for normal in br_mesh.source_normals:
