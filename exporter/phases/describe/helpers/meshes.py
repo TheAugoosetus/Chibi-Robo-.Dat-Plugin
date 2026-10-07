@@ -146,12 +146,11 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
         (attr.name, [tuple(cd.color) for cd in attr.data])
         for attr in mesh_data.color_attributes
     ]
-    source_normals = _pristine_source_normals(mesh_obj, logger)
-    all_normals = (
-        source_normals
-        if source_normals is not None
-        else _extract_normals(mesh_data, normal_xform)
-    )
+    # Keep Blender's editable/display normals and the untouched exact DAT
+    # normals as separate channels. The former are in GC-world presentation
+    # space; the latter remain in the source PObject's bind/local space.
+    all_normals = _extract_normals(mesh_data, normal_xform)
+    all_source_normals = _pristine_source_normals(mesh_obj, logger)
 
     per_vertex_groups = _extract_vertex_groups(mesh_obj, bone_names)
     parent_bone_name = _determine_parent_bone_name(
@@ -177,6 +176,7 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
             mesh_obj.name, mat_index, num_materials,
             all_vertices, all_polys, poly_indices,
             all_uv_data, all_color_data, all_normals,
+            all_source_normals,
             per_vertex_groups, parent_bone_name, is_hidden,
             mesh_data.materials, logger,
             material_cache, image_cache,
@@ -186,10 +186,6 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
             # object. _build_submesh deliberately does not know about bpy
             # objects, so attach this metadata here at the object boundary.
             br_mesh.source_skin_type = mesh_obj.get("dat_hsd_skin_type")
-            # _pristine_source_normals returns the untouched DAT payload
-            # verbatim. Those vectors are already in PObject-local space;
-            # the editable fallback from _extract_normals is GC-world-space.
-            br_mesh.normals_are_source_local = source_normals is not None
             raw_formats = mesh_obj.get("dat_hsd_vertex_formats")
             if isinstance(raw_formats, str) and raw_formats:
                 try:
@@ -212,6 +208,7 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
 def _build_submesh(mesh_name, mat_index, num_materials,
                    all_vertices, all_polys, poly_indices,
                    all_uv_data, all_color_data, all_normals,
+                   all_source_normals,
                    per_vertex_groups, parent_bone_name, is_hidden,
                    bpy_materials, logger,
                    material_cache, image_cache):
@@ -244,6 +241,10 @@ def _build_submesh(mesh_name, mat_index, num_materials,
     ]
     normals = (
         [all_normals[li] for li in loop_indices] if all_normals else None
+    )
+    source_normals = (
+        [all_source_normals[li] for li in loop_indices]
+        if all_source_normals else None
     )
 
     vertex_groups = []
@@ -280,6 +281,7 @@ def _build_submesh(mesh_name, mat_index, num_materials,
         uv_layers=uv_layers,
         color_layers=color_layers,
         normals=normals,
+        source_normals=source_normals,
         vertex_groups=vertex_groups,
         parent_bone_name=parent_bone_name,
         is_hidden=is_hidden,
