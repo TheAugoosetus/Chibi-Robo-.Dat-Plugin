@@ -5,15 +5,16 @@ copies, parent-bone ownership, and material node graphs all come
 pre-decided from the Plan phase.
 """
 import json
+import base64
+import struct
+import zlib
 import bpy
 from mathutils import Matrix, Vector
 
 try:
     from .....shared.helpers.logger import StubLogger
-    from .....shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
-    from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 
 
 def build_meshes(br_model, armature, context, logger=StubLogger()):
@@ -117,21 +118,20 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
             poly.use_smooth = True
         mesh_data.normals_split_custom_set(br_mesh.normals)
 
-    # Keep the exact decoded HSD normal values in an internal CORNER
-    # attribute. Blender requires unit custom normals, so the visible normal
-    # layer cannot preserve the small fixed-point magnitude error present in
-    # stock S8/S16 DAT normals. This internal layer is used only when a
-    # fingerprint later proves the editable mesh/normal state is unchanged.
+    # Blender requires custom normals to be unit vectors, so its visible
+    # normal layer cannot retain the tiny fixed-point magnitude differences
+    # present in stock HSD S8/S16 normals. Store the exact decoded source
+    # values as compressed object metadata. Post-process stamps the edit
+    # fingerprint only after its coordinate-system bake has finished.
     if (br_mesh.source_normals
             and br_mesh.source_skin_type in ("RIGID", "SINGLE_BONE")
             and len(br_mesh.source_normals) == len(mesh_data.loops)):
-        source_attr = mesh_data.attributes.new(
-            name=".dat_hsd_source_normal",
-            type='FLOAT_VECTOR',
-            domain='CORNER',
-        )
-        for i, normal in enumerate(br_mesh.source_normals):
-            source_attr.data[i].vector = normal
+        raw = bytearray()
+        for normal in br_mesh.source_normals:
+            raw.extend(struct.pack(">fff", *normal))
+        mesh_object["dat_hsd_source_normals_b64"] = base64.b64encode(
+            zlib.compress(bytes(raw), 9)).decode("ascii")
+        mesh_object["dat_hsd_source_normal_count"] = len(br_mesh.source_normals)
 
     if br_mesh.is_hidden:
         mesh_object.hide_render = True
@@ -159,11 +159,6 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
 
     mesh_data.update(calc_edges=True, calc_edges_loose=False)
     mesh_data.validate(verbose=False, clean_customdata=False)
-
-    if mesh_data.attributes.get(".dat_hsd_source_normal") is not None:
-        mesh_object["dat_hsd_source_normal_fingerprint"] = (
-            mesh_normal_fingerprint(mesh_object)
-        )
 
     return mesh_object
 
