@@ -361,9 +361,10 @@ def _extract_normals(mesh_data, normal_xform):
     uses that combination extensively: normals feed lighting/reflection while
     CLR0 can independently feed diffuse RGB and/or alpha.
 
-    For imported untouched DATs, _pristine_source_normals() runs first so
-    fixed-point source values can round-trip exactly. This function is the
-    editable fallback for new or modified meshes.
+    This function always captures Blender's editable/display normals.
+    Untouched fixed-point DAT normals are recovered independently by
+    _pristine_source_normals() into BRMesh.source_normals, so exact
+    preservation never replaces the editable geometry channel.
     """
     if hasattr(mesh_data, 'corner_normals'):
         raw = [cn.vector for cn in mesh_data.corner_normals]
