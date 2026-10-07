@@ -87,6 +87,10 @@ def plan_meshes(ir_model):
                 for cl in ir_mesh.color_layers
             ],
             normals=list(ir_mesh.normals) if ir_mesh.normals else None,
+            source_normals=(
+                list(ir_mesh.source_normals)
+                if getattr(ir_mesh, 'source_normals', None) else None
+            ),
             vertex_groups=plan_vertex_groups(ir_mesh),
             parent_bone_name=parent_bone_name,
             is_hidden=ir_mesh.is_hidden,
