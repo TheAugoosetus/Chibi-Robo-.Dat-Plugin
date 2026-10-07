@@ -10,8 +10,10 @@ from mathutils import Matrix, Vector
 
 try:
     from .....shared.helpers.logger import StubLogger
+    from .....shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 
 
 def build_meshes(br_model, armature, context, logger=StubLogger()):
@@ -115,6 +117,22 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
             poly.use_smooth = True
         mesh_data.normals_split_custom_set(br_mesh.normals)
 
+    # Keep the exact decoded HSD normal values in an internal CORNER
+    # attribute. Blender requires unit custom normals, so the visible normal
+    # layer cannot preserve the small fixed-point magnitude error present in
+    # stock S8/S16 DAT normals. This internal layer is used only when a
+    # fingerprint later proves the editable mesh/normal state is unchanged.
+    if (br_mesh.source_normals
+            and br_mesh.source_skin_type in ("RIGID", "SINGLE_BONE")
+            and len(br_mesh.source_normals) == len(mesh_data.loops)):
+        source_attr = mesh_data.attributes.new(
+            name=".dat_hsd_source_normal",
+            type='FLOAT_VECTOR',
+            domain='CORNER',
+        )
+        for i, normal in enumerate(br_mesh.source_normals):
+            source_attr.data[i].vector = normal
+
     if br_mesh.is_hidden:
         mesh_object.hide_render = True
         mesh_object.hide_set(True)
@@ -141,6 +159,11 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
 
     mesh_data.update(calc_edges=True, calc_edges_loose=False)
     mesh_data.validate(verbose=False, clean_customdata=False)
+
+    if mesh_data.attributes.get(".dat_hsd_source_normal") is not None:
+        mesh_object["dat_hsd_source_normal_fingerprint"] = (
+            mesh_normal_fingerprint(mesh_object)
+        )
 
     return mesh_object
 
