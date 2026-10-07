@@ -12,10 +12,15 @@ class IRMesh:
     faces: list[list[int]]
     uv_layers: list[IRUVLayer] = field(default_factory=list)
     color_layers: list[IRColorLayer] = field(default_factory=list)
+    # Editable/display normals, one per face loop. For WEIGHTED meshes the
+    # importer envelope-deforms these into the same presentation frame Blender
+    # edits; compose reverses that normal deformation before DAT encoding.
     normals: list[tuple[float, float, float]] | None = None
-    # Exact decoded source normal values before Blender/unit normalization.
-    # Used only for untouched imported meshes; edited meshes export Blender's
-    # effective normals instead.
+    # Exact decoded DAT normal values before Blender/unit normalization and
+    # before any envelope normal deformation. These remain in the source
+    # PObject's bind/local space. Exact passthrough currently applies only to
+    # untouched RIGID/SINGLE_BONE imports; WEIGHTED passthrough needs a paired
+    # source-normal space conversion before it can be lossless.
     source_normals: list[tuple[float, float, float]] | None = None
     material: object = None  # IRMaterial, typed loosely to avoid circular import
     bone_weights: IRBoneWeights | None = None
