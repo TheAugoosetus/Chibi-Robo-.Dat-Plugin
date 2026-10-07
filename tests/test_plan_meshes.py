@@ -41,7 +41,8 @@ def _make_bone(name, parent_index=None, instance_child_bone_index=None,
 def _make_mesh(name="m", parent_bone_index=0, vertices=None, faces=None,
                bone_weights=None, material=None, uv_layers=None,
                color_layers=None, normals=None, cull_front=False,
-               cull_back=False, is_hidden=False):
+               cull_back=False, is_hidden=False,
+               normals_are_source_local=False):
     return IRMesh(
         name=name,
         vertices=vertices if vertices is not None else [(0, 0, 0), (1, 0, 0), (0, 1, 0)],
@@ -49,6 +50,7 @@ def _make_mesh(name="m", parent_bone_index=0, vertices=None, faces=None,
         uv_layers=uv_layers or [],
         color_layers=color_layers or [],
         normals=normals,
+        normals_are_source_local=normals_are_source_local,
         material=material,
         bone_weights=bone_weights,
         parent_bone_index=parent_bone_index,
@@ -195,6 +197,21 @@ class TestPlanMeshes:
         assert m.material_index is None  # no IR material was supplied
         assert br_instances == []
         assert br_materials == []
+
+    def test_normal_coordinate_space_copied_to_br_mesh(self):
+        ir = IRModel(
+            name="rig",
+            bones=[_make_bone("Root")],
+            meshes=[_make_mesh(
+                "body",
+                parent_bone_index=0,
+                normals=[(31 / 64, -10 / 64, 54 / 64)] * 3,
+                normals_are_source_local=True,
+            )],
+        )
+        br_meshes, _, _ = plan_meshes(ir)
+        assert br_meshes[0].normals_are_source_local is True
+
 
     def test_id_uses_zero_padded_index(self):
         """Mesh keys must sort stably — width driven by total count."""
