@@ -470,6 +470,11 @@ _SKIP_FIELDS = {
     'normalized_local_matrix', 'scale_correction', 'accumulated_scale',
     # Pre-computed deformed geometry — derived from bone weights + vertices
     'deformed_vertices', 'deformed_normals',
+    # Exact DAT normal payload used only as a lossless-preservation side
+    # channel. The editable/renderable geometry is scored through `normals`;
+    # source_normals is intentionally absent after unsupported Blender paths
+    # (currently weighted-envelope exact preservation).
+    'source_normals',
     # Convenience/metadata — DAT file offsets used as cache keys, not model data
     'image_id', 'palette_id',
     # Internal IDs — opaque foreign-key targets that cross-reference entities
