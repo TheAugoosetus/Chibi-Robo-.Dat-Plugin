@@ -369,21 +369,34 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
         vertex_descs.append(uv_desc)
         vertex_buffers.append(('uv', uv_verts, uv_indices))
 
-    # Color layers — only include if colors actually vary per vertex.
-    # Uniform color layers (all identical values) are material-level defaults
-    # that should not be encoded as vertex attributes.
+    # Color layers. Newly-authored uniform Blender color attributes can be
+    # omitted as material-level defaults, but an imported DAT's CLR0/CLR1
+    # descriptor is authoritative even when every corner has the same color.
+    # Chibi-Robo's Bird model contains two such constant-color PObjects; the
+    # old exporter dropped their CLR0 attributes and turned pink/red parts
+    # black on round-trip.
     for color_layer in ir_mesh.color_layers:
         # Skip alpha-only layers (alpha is part of RGBA in the color layer)
         if 'alpha_' in color_layer.name:
             continue
-        # Skip uniform color layers (no per-vertex variation)
-        if color_layer.colors and all(c == color_layer.colors[0] for c in color_layer.colors):
-            continue
         clr_attr = GX_VA_CLR0 if 'color_0' in color_layer.name else GX_VA_CLR1
+        source_fmt = _source_vertex_format(ir_mesh, clr_attr)
+        is_uniform = (
+            color_layer.colors
+            and all(c == color_layer.colors[0] for c in color_layer.colors)
+        )
+        if is_uniform and source_fmt is None:
+            continue
+
         clr_verts, clr_indices, clr_buffer = _encode_indexed_rgba(color_layer.colors)
-        clr_desc = _make_vertex_desc(clr_attr, 0, GX_RGBA8, stride=4)
-        clr_desc.attribute_type = GX_INDEX16
-        clr_desc.component_count = 0  # GX_CLR_RGBA
+        if source_fmt is not None:
+            clr_desc = _make_vertex_desc_from_source(
+                clr_attr, source_fmt, len(clr_verts),
+                0, GX_RGBA8, 4)
+        else:
+            clr_desc = _make_vertex_desc(clr_attr, 0, GX_RGBA8, stride=4)
+            clr_desc.attribute_type = GX_INDEX16
+            clr_desc.component_count = 0  # GX_CLR_RGBA
         clr_desc.raw_vertex_data = clr_buffer
         vertex_descs.append(clr_desc)
         vertex_buffers.append(('color', clr_verts, clr_indices))
