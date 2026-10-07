@@ -5,6 +5,7 @@ nodes + links and emits the corresponding ``nodes.new()`` / ``links.new()``
 calls. All TEV, pixel-engine, and output-shader logic lives in the Plan
 phase (``importer/phases/plan/helpers/materials.py``).
 """
+import base64
 import bpy
 import numpy as np
 
@@ -139,6 +140,26 @@ def _resolve_image(br_image, image_cache):
         bpy_image.dat_gx_format = br_image.gx_format_override
     if br_image.palette_format_override is not None and hasattr(bpy_image, 'dat_palette_format'):
         bpy_image.dat_palette_format = br_image.palette_format_override
+
+    # Blender only stores decoded RGBA pixels. Preserve the exact source GX
+    # image/TLUT payload beside the editable image so an untouched imported
+    # texture can round-trip without a lossy CMPR/palette recompression.
+    if br_image.source_raw_image_data is not None:
+        bpy_image["dat_hsd_source_image_b64"] = base64.b64encode(
+            br_image.source_raw_image_data).decode("ascii")
+    if br_image.source_raw_palette_data is not None:
+        bpy_image["dat_hsd_source_palette_b64"] = base64.b64encode(
+            br_image.source_raw_palette_data).decode("ascii")
+    if br_image.source_format_id is not None:
+        bpy_image["dat_hsd_source_format_id"] = int(br_image.source_format_id)
+    if br_image.source_palette_format_id is not None:
+        bpy_image["dat_hsd_source_palette_format_id"] = int(
+            br_image.source_palette_format_id)
+    if br_image.source_palette_entry_count:
+        bpy_image["dat_hsd_source_palette_entry_count"] = int(
+            br_image.source_palette_entry_count)
+    if br_image.source_pixel_hash:
+        bpy_image["dat_hsd_source_pixel_hash"] = br_image.source_pixel_hash
 
     image_cache[br_image.cache_key] = bpy_image
     return bpy_image
