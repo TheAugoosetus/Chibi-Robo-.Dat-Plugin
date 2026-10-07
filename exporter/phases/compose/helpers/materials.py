@@ -434,12 +434,49 @@ def _build_image_node(ir_image, logger=StubLogger(), image_cache=None):
     img.maxLOD = 0.0
     img.data_address = 0  # Set during write
 
-    # Select format and encode
+    # Select output format. If this image came from a DAT and its Blender
+    # pixels remained unchanged, prefer the exact source GX payload over a
+    # decode/re-encode cycle. CMPR and indexed encoders are intentionally
+    # lossy, so preserving the original blocks avoids needless visual drift.
     analysis = analyze_pixels(ir_image.pixels, ir_image.width, ir_image.height)
     format_id = select_format(analysis, ir_image.gx_format_override)
     palette_format = select_palette_format(ir_image.palette_format_override)
-    result = encode_texture(ir_image.pixels, ir_image.width, ir_image.height,
-                            format_id, palette_format)
+
+    source_format = getattr(ir_image, "source_format_id", None)
+    source_palette_format = getattr(
+        ir_image, "source_palette_format_id", None)
+    source_image = getattr(ir_image, "source_raw_image_data", None)
+    source_palette = getattr(ir_image, "source_raw_palette_data", None)
+
+    palette_compatible = (
+        source_palette is None
+        or palette_format == source_palette_format
+    )
+    use_source_payload = (
+        source_image is not None
+        and source_format == format_id
+        and palette_compatible
+    )
+
+    if use_source_payload:
+        result = {
+            'image_data': bytes(source_image),
+            'palette_data': (
+                bytes(source_palette) if source_palette is not None else None
+            ),
+            'palette_format': source_palette_format,
+            'palette_count': (
+                int(getattr(ir_image, "source_palette_entry_count", 0) or 0)
+                if source_palette is not None else None
+            ),
+        }
+        logger.debug(
+            "      image '%s': reused original GX payload (%d bytes)",
+            ir_image.name, len(source_image))
+    else:
+        result = encode_texture(
+            ir_image.pixels, ir_image.width, ir_image.height,
+            format_id, palette_format)
 
     img.format = format_id
     img.raw_image_data = result['image_data']
