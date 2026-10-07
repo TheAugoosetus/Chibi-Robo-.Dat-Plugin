@@ -77,11 +77,14 @@ def pose_action_fingerprint(action):
 
 
 def mesh_normal_fingerprint(mesh_obj):
-    """Fingerprint geometry state that can change an exported normal stream.
+    """Fingerprint editable state that can change an exported normal stream.
 
-    The source-normal passthrough is valid only while topology, vertex
-    positions, effective corner normals, and object transform are unchanged.
-    UV/color edits intentionally do not invalidate it.
+    Exact DAT bind/local normals are reusable only while both the mesh and its
+    skinning coordinate system are unchanged. The digest therefore covers
+    topology, positions, effective corner normals, object transform, source
+    skin type, owner bone, vertex-group weights, armature rest data, and
+    preserved HSD bone flags. UV/color/material edits intentionally do not
+    invalidate it.
     """
     h = hashlib.sha256()
     mesh = mesh_obj.data
@@ -116,6 +119,66 @@ def mesh_normal_fingerprint(mesh_obj):
     for row in range(4):
         for col in range(4):
             _put_float(h, matrix[row][col])
+
+    # Skinning semantics / ownership. A rigid mesh reparented to another JOBJ
+    # needs its world-space editable normals re-localised against that new
+    # owner; an old exact local payload is no longer authoritative.
+    _put_text(h, getattr(mesh_obj, "parent_bone", "") or "")
+    try:
+        skin_type = mesh_obj.get("dat_hsd_skin_type", "")
+    except (AttributeError, TypeError):
+        skin_type = ""
+    _put_text(h, skin_type or "")
+
+    # Vertex-group names and per-vertex weights define envelope membership.
+    # Hash them even for currently-rigid meshes so changing a source mesh into
+    # a weighted one cannot leave old exact-normal metadata looking pristine.
+    groups = list(getattr(mesh_obj, "vertex_groups", ()) or ())
+    group_rows = sorted(
+        (
+            int(getattr(group, "index", i)),
+            str(getattr(group, "name", "")),
+        )
+        for i, group in enumerate(groups)
+    )
+    h.update(struct.pack(">I", len(group_rows)))
+    for group_index, group_name in group_rows:
+        h.update(struct.pack(">i", group_index))
+        _put_text(h, group_name)
+
+    h.update(struct.pack(">I", len(vertices)))
+    for vertex in vertices:
+        assignments = sorted(
+            (
+                int(getattr(item, "group", -1)),
+                float(getattr(item, "weight", 0.0)),
+            )
+            for item in (getattr(vertex, "groups", ()) or ())
+        )
+        h.update(struct.pack(">I", len(assignments)))
+        for group_index, weight in assignments:
+            h.update(struct.pack(">i", group_index))
+            _put_float(h, weight)
+
+    # Envelope/local normal space also depends on the rest skeleton. Reuse the
+    # existing rest fingerprint, then add preserved HSD flags because
+    # SKELETON/SKELETON_ROOT bits participate in envelope coordinate-system
+    # selection but are not native Blender rest-matrix state.
+    parent = getattr(mesh_obj, "parent", None)
+    if parent is not None and getattr(parent, "type", None) == "ARMATURE":
+        _put_text(h, armature_rest_fingerprint(parent))
+        bones = list(getattr(getattr(parent, "data", None), "bones", ()) or ())
+        h.update(struct.pack(">I", len(bones)))
+        for bone in bones:
+            _put_text(h, getattr(bone, "name", ""))
+            try:
+                flags = bone.get("dat_hsd_flags")
+            except (AttributeError, TypeError):
+                flags = None
+            _put_text(h, "" if flags is None else int(flags))
+    else:
+        _put_text(h, "")
+        h.update(struct.pack(">I", 0))
 
     return h.hexdigest()
 
