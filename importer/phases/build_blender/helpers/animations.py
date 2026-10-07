@@ -65,11 +65,23 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
         armature.animation_data.action = action
         armature.animation_data.action_slot = armature_slot
 
-        _bake_action(
-            br_action.bone_tracks, action, max_frame, bake_skeleton,
-            logger, armature,
-            per_action_scale=(options.get("game") == "CHIBI_ROBO"),
+        preserve_only = (
+            options.get("game") == "CHIBI_ROBO"
+            and options.get("chibi_animation_mode", "EDITABLE") == "PRESERVE"
+            and _can_preserve_source_animation(br_action)
         )
+
+        if preserve_only:
+            logger.info(
+                "  Action '%s': preserving original HSD bone animation "
+                "without editable pose bake", br_action.name)
+            action["dat_hsd_animation_preserve_only"] = True
+        else:
+            _bake_action(
+                br_action.bone_tracks, action, max_frame, bake_skeleton,
+                logger, armature,
+                per_action_scale=(options.get("game") == "CHIBI_ROBO"),
+            )
 
         mat_fcurve_count = _build_material_tracks(
             br_action, action, material_lookup, mat_slot_indices, max_frame,
@@ -85,8 +97,10 @@ def build_bone_animations(br_actions, armature, options, bake_skeleton,
                 br_action.source_hsd_animation)
             action["dat_hsd_source_pose_fingerprint"] = pose_action_fingerprint(action)
         actions.append(action)
-        logger.info("  Action '%s': %d bone fcurves, %d material fcurves",
-                    action.name, len(action.fcurves), mat_fcurve_count)
+        logger.info(
+            "  Action '%s': %d bone/material-visible fcurves, %d material fcurves%s",
+            action.name, len(action.fcurves), mat_fcurve_count,
+            " [source-preserved]" if preserve_only else "")
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -124,6 +138,25 @@ def _encode_source_hsd_animation(snapshot):
             }
         out["bones"].append(encoded_entry)
     return json.dumps(out, separators=(',', ':'))
+
+
+def _can_preserve_source_animation(br_action):
+    """True when the original HSD bone animation can be emitted verbatim.
+
+    Animation.joint targets need an explicit source-Joint mapping that the
+    preservation layer does not carry yet, so those actions remain on the
+    editable/rebuilt path even when Preserve Only is selected.
+    """
+    source = getattr(br_action, "source_hsd_animation", None)
+    if not isinstance(source, dict):
+        return False
+    for entry in source.get("bones", []):
+        if not isinstance(entry, dict):
+            continue
+        anim = entry.get("animation")
+        if isinstance(anim, dict) and anim.get("has_joint_target"):
+            return False
+    return True
 
 
 def reset_pose(armature):
