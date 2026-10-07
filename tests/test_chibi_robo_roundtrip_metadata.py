@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from shared.BR.armature import BRArmature, BRBone
-from shared.BR.meshes import BRVertexGroup
+from shared.BR.meshes import BRMesh, BRVertexGroup
 from shared.IR.enums import SkinType, ScaleInheritance, CoordType
 from shared.IR.skeleton import IRBone
 from shared.IR.geometry import IRMesh
@@ -12,7 +12,9 @@ from shared.Constants.hsd import (
     JOBJ_LIGHTING, JOBJ_OPA, JOBJ_ROOT_OPA,
 )
 from exporter.phases.plan.helpers.armature import plan_armature
-from exporter.phases.plan.helpers.meshes import _pack_bone_weights
+from exporter.phases.plan.helpers.meshes import (
+    _pack_bone_weights, plan_meshes as plan_export_meshes,
+)
 from exporter.phases.plan.helpers.scene import refine_bone_flags
 
 
@@ -156,3 +158,25 @@ def test_unannotated_vertex_groups_remain_weighted():
     weights = _pack_bone_weights(groups)
 
     assert weights.type == SkinType.WEIGHTED
+
+
+def test_export_plan_preserves_exact_normal_coordinate_space():
+    br_mesh = BRMesh(
+        name="rigid",
+        id="mesh_0_root",
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[],
+        normals=[(31 / 64, -10 / 64, 54 / 64)],
+        normals_are_source_local=True,
+        vertex_groups=[
+            BRVertexGroup(name="root", assignments=[(0, 1.0)]),
+        ],
+        parent_bone_name="root",
+        source_skin_type=SkinType.RIGID.value,
+    )
+
+    ir_meshes = plan_export_meshes([br_mesh], [], [_ir_bone(0)])
+
+    assert len(ir_meshes) == 1
+    assert ir_meshes[0].normals_are_source_local is True
+    assert ir_meshes[0].bone_weights.type == SkinType.RIGID
