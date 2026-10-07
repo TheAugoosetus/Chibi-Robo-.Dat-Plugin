@@ -309,6 +309,8 @@ def plan_material(ir_material, name, has_color_animation=False,
         use_backface_culling=bool(cull_front or cull_back),
         blend_method=blend_method,
         dedup_key=dedup_key,
+        source_color_source=ir_material.color_source.value,
+        source_alpha_source=ir_material.alpha_source.value,
     )
 
 
