@@ -18,8 +18,10 @@ from exporter.phases.compose.helpers.meshes import (
     _find_skeleton_bone,
     _undeform_vertices,
     _undeform_normals,
+    _undeform_rigid_normals,
 )
 from shared.Constants.hsd import JOBJ_SKELETON, JOBJ_SKELETON_ROOT
+from importer.phases.describe.helpers.meshes import _world_transform_normals
 
 
 def _identity_4x4():
@@ -261,6 +263,32 @@ class TestUndeformNormalRoundTrip:
 
         for got, expected in zip(restored[0], bind_normal):
             assert abs(got - expected) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Rigid normal owner transform round-trip
+# ---------------------------------------------------------------------------
+
+class TestRigidNormalRoundTrip:
+    def test_owner_world_then_export_reverse_returns_local_normal(self):
+        owner_world = [
+            [0.0, -1.0, 0.0, 0.0],
+            [2.0,  0.0, 0.0, 0.0],
+            [0.0,  0.0, 1.0, 0.0],
+            [0.0,  0.0, 0.0, 1.0],
+        ]
+        local = Vector((1.0, 1.0, 0.0)).normalized()
+        world = _world_transform_normals([tuple(local)], owner_world)
+        restored = _undeform_rigid_normals(world, owner_world)
+
+        for got, expected in zip(restored[0], local):
+            assert abs(got - expected) < 1e-6
+
+    def test_exact_local_normal_needs_no_reverse_transform(self):
+        # This is the semantic reason for normals_are_source_local: an exact
+        # untouched DAT normal is already local and must bypass owner reversal.
+        local = (31 / 64, -10 / 64, 54 / 64)
+        assert local != tuple(Vector(local).normalized())
 
 
 # ---------------------------------------------------------------------------
