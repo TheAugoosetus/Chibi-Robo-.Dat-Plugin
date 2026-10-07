@@ -122,8 +122,8 @@ def test_exact_rigid_local_normal_bypasses_owner_reverse_transform():
             (0.0, 1.0, 0.0),
         ],
         faces=[[0, 1, 2]],
-        normals=[source, source, source],
-        normals_are_source_local=True,
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        source_normals=[source, source, source],
         bone_weights=IRBoneWeights(
             type=SkinType.RIGID,
             bone_name="root",
