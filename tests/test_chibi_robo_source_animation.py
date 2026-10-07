@@ -3,7 +3,12 @@
 from types import SimpleNamespace
 
 from exporter.phases.compose.helpers.animations import _compose_source_anim_set
-from shared.helpers.blender_fingerprint import pose_action_fingerprint
+from shared.helpers.blender_fingerprint import (
+    armature_rest_fingerprint, pose_action_fingerprint,
+)
+from importer.phases.post_process.post_process import (
+    _stamp_source_skeleton_fingerprints,
+)
 
 
 class _Logger:
@@ -107,3 +112,71 @@ def test_pose_action_fingerprint_ignores_non_pose_curves():
     baseline = pose_action_fingerprint(a)
     material.keyframe_points[0].co = (0.0, 0.9)
     assert pose_action_fingerprint(a) == baseline
+
+
+class _ArmatureProps:
+    def __init__(self, bones, game="CHIBI_ROBO"):
+        self.type = "ARMATURE"
+        self.data = SimpleNamespace(bones=bones)
+        self._props = {"dat_game_origin": game}
+
+    def get(self, key, default=None):
+        return self._props.get(key, default)
+
+    def __getitem__(self, key):
+        return self._props[key]
+
+    def __setitem__(self, key, value):
+        self._props[key] = value
+
+
+def _fingerprint_bone():
+    return SimpleNamespace(
+        name="Root",
+        parent=None,
+        matrix_local=[
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        inherit_scale="ALIGNED",
+        use_connect=False,
+    )
+
+
+def test_post_process_refreshes_source_skeleton_fingerprint_after_rest_bake():
+    bone = _fingerprint_bone()
+    arm = _ArmatureProps([bone])
+    original = armature_rest_fingerprint(arm)
+    arm["dat_hsd_source_skeleton_fingerprint"] = original
+
+    # Mirror the material fact that Armature.transform() changes the
+    # armature-space rest matrix even when the user made no edit.
+    bone.matrix_local[1][3] = 12.0
+    current = armature_rest_fingerprint(arm)
+    assert current != original
+
+    _stamp_source_skeleton_fingerprints([arm])
+
+    assert arm["dat_hsd_source_skeleton_fingerprint"] == current
+
+
+def test_post_process_does_not_create_source_fingerprint_for_unmarked_armature():
+    bone = _fingerprint_bone()
+    arm = _ArmatureProps([bone])
+    assert arm.get("dat_hsd_source_skeleton_fingerprint") is None
+
+    _stamp_source_skeleton_fingerprints([arm])
+
+    assert arm.get("dat_hsd_source_skeleton_fingerprint") is None
+
+
+def test_post_process_does_not_restamp_non_chibi_armature():
+    bone = _fingerprint_bone()
+    arm = _ArmatureProps([bone], game="COLO_XD")
+    arm["dat_hsd_source_skeleton_fingerprint"] = "sentinel"
+
+    _stamp_source_skeleton_fingerprints([arm])
+
+    assert arm["dat_hsd_source_skeleton_fingerprint"] == "sentinel"
