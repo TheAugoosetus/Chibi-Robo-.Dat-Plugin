@@ -1,8 +1,10 @@
 """Chibi-Robo-specific round-trip metadata regressions."""
 
+from types import SimpleNamespace
+
 from shared.BR.armature import BRArmature, BRBone
 from shared.BR.meshes import BRVertexGroup
-from shared.IR.enums import SkinType, ScaleInheritance
+from shared.IR.enums import SkinType, ScaleInheritance, CoordType
 from shared.IR.skeleton import IRBone
 from shared.IR.geometry import IRMesh
 from shared.Constants.hsd import (
@@ -98,6 +100,38 @@ def test_sample_reflective_joint_flags_survive_exactly():
 
     refine_bone_flags([bone], [mesh])
     assert bone.flags == 0x10050180
+
+
+def test_new_reflective_material_derives_sample_render_flags():
+    # New PIA+ meshes have no source_hsd_flags to preserve. A reflective,
+    # specular material must therefore synthesize the same TEXGEN/SPECULAR
+    # state that stock Sample carries on its mesh-owning JOBJs.
+    bone = _ir_bone(0)
+    bone.source_hsd_flags = None
+    bone.mesh_indices = [0]
+
+    mat = SimpleNamespace(
+        is_translucent=False,
+        enable_specular=True,
+        texture_layers=[
+            SimpleNamespace(coord_type=CoordType.REFLECTION),
+        ],
+    )
+    mesh = IRMesh(
+        name="new_reflective_mesh",
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[],
+        parent_bone_index=0,
+        material=mat,
+    )
+
+    refine_bone_flags([bone], [mesh])
+
+    assert bone.flags & JOBJ_TEXGEN
+    assert bone.flags & JOBJ_SPECULAR
+    assert bone.flags & JOBJ_LIGHTING
+    assert bone.flags & JOBJ_OPA
+    assert bone.flags & JOBJ_ROOT_OPA
 
 
 def test_rigid_source_skin_type_survives_full_weight_vertex_group():
