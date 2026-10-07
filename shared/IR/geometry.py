@@ -18,10 +18,9 @@ class IRMesh:
     normals: list[tuple[float, float, float]] | None = None
     # Exact decoded DAT normal values before Blender/unit normalization and
     # before any envelope normal deformation. These remain in the source
-    # PObject's bind/local space. Direct IR/node round-trips may reuse this
-    # channel for any skin type. Across the Blender edit boundary it is
-    # currently persisted only for pristine RIGID/SINGLE_BONE meshes, because
-    # weighted validity also depends on vertex weights and bind matrices.
+    # PObject's bind/local space. Blender stores them as preservation metadata
+    # and reuses them only while a fingerprint proves geometry *and skinning
+    # context* are unchanged; edited meshes rebuild from `normals` instead.
     source_normals: list[tuple[float, float, float]] | None = None
     material: object = None  # IRMaterial, typed loosely to avoid circular import
     bone_weights: IRBoneWeights | None = None
