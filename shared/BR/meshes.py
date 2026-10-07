@@ -36,6 +36,7 @@ class BRMesh:
     uv_layers: list[BRUVLayer] = field(default_factory=list)
     color_layers: list[BRColorLayer] = field(default_factory=list)
     normals: list[tuple[float, float, float]] | None = None
+    source_normals: list[tuple[float, float, float]] | None = None
     vertex_groups: list[BRVertexGroup] = field(default_factory=list)
     parent_bone_name: str | None = None  # records mesh → bone ownership
     is_hidden: bool = False
