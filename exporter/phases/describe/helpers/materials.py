@@ -104,6 +104,8 @@ def _serialise_node(node, image_cache):
     # touch bpy output sockets.
     if bl_idname == 'ShaderNodeRGB':
         properties['color'] = tuple(node.outputs[0].default_value)
+    elif bl_idname == 'ShaderNodeValue':
+        properties['value'] = float(node.outputs[0].default_value)
 
     # Unlinked input-socket defaults, keyed by socket identifier (the
     # single BR socket convention — unique even when names collide, e.g.
