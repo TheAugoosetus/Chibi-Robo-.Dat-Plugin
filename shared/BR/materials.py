@@ -85,3 +85,8 @@ class BRMaterial:
     # Dedup key used by build to share one bpy material between meshes.
     # A plan-time constructed tuple like (id(ir_material), cull_f, cull_b).
     dedup_key: object = None
+    # Original HSD MObj color/alpha routing. Blender's node graph can be
+    # semantically ambiguous (especially a lit VERTEX source represented by
+    # a white helper RGB node), so imported materials carry this hint.
+    source_color_source: str | None = None
+    source_alpha_source: str | None = None
