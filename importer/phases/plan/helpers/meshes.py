@@ -91,6 +91,8 @@ def plan_meshes(ir_model):
                 list(ir_mesh.source_normals)
                 if getattr(ir_mesh, 'source_normals', None) else None
             ),
+            normals_are_source_local=getattr(
+                ir_mesh, 'normals_are_source_local', False),
             vertex_groups=plan_vertex_groups(ir_mesh),
             parent_bone_name=parent_bone_name,
             is_hidden=ir_mesh.is_hidden,
