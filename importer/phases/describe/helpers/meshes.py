@@ -165,17 +165,23 @@ def _describe_pobj(pobj, joint, bone_index, count,
         verts_out = _world_transform_vertices(verts_out, owner_world)
         normals = _world_transform_normals(normals, owner_world)
 
-    source_vertex_formats = [
-        {
-            "attribute": int(v.attribute),
-            "attribute_type": int(v.attribute_type),
-            "component_count": int(v.component_count),
-            "component_type": int(v.component_type),
-            "component_frac": int(v.component_frac),
-            "stride": int(v.stride),
-        }
-        for v in pobj.vertex_list.vertices
-    ]
+    # Exact GX packing is preservation metadata, not a prerequisite for
+    # describing geometry. Parsed production Vertex nodes provide all six
+    # fields; incomplete synthetic/malformed descriptors should simply fall
+    # back to generic export formats instead of aborting the whole model.
+    source_vertex_formats = []
+    for v in pobj.vertex_list.vertices:
+        try:
+            source_vertex_formats.append({
+                "attribute": int(v.attribute),
+                "attribute_type": int(v.attribute_type),
+                "component_count": int(v.component_count),
+                "component_type": int(v.component_type),
+                "component_frac": int(v.component_frac),
+                "stride": int(v.stride),
+            })
+        except (AttributeError, TypeError, ValueError):
+            continue
 
     return IRMesh(
         name=pobj.name if pobj.name else str(count),

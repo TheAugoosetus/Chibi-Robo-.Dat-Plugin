@@ -390,8 +390,9 @@ class TestBuildVertexToEnvelopeMap:
 
 class TestComputeEnvelopeDeformMatrix:
     def test_single_weight_no_coord_uses_world_only(self):
-        bones = [_make_bone(world_matrix=Matrix.Identity(4) * 2)]
-        bones[0].world_matrix = [list(row) for row in Matrix.Identity(4)]
+        bones = [_make_bone(
+            world_matrix=[list(row) for row in Matrix.Identity(4)]
+        )]
         bones[0].world_matrix[0][0] = 5.0  # x scale 5
         envelope = SimpleNamespace(envelopes=[
             SimpleNamespace(weight=1.0, joint=SimpleNamespace(address=0x100)),

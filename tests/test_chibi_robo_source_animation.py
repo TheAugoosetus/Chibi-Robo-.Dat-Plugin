@@ -1,8 +1,15 @@
 """Lossless Chibi-Robo source-animation preservation regressions."""
 
+import json
 from types import SimpleNamespace
 
 from exporter.phases.compose.helpers.animations import _compose_source_anim_set
+from exporter.phases.describe.helpers.animations_decode import (
+    _read_pristine_source_hsd_animation,
+)
+from importer.phases.build_blender.helpers.animations import (
+    _encode_source_hsd_animation,
+)
 from shared.helpers.blender_fingerprint import (
     armature_rest_fingerprint, pose_action_fingerprint,
 )
@@ -89,8 +96,72 @@ class _FCurve:
 
 
 class _Action:
-    def __init__(self, curves):
+    def __init__(self, curves, props=None):
         self.fcurves = curves
+        self._props = dict(props or {})
+
+    def get(self, key, default=None):
+        return self._props.get(key, default)
+
+    def __setitem__(self, key, value):
+        self._props[key] = value
+
+
+def _source_animation_snapshot(loop=True):
+    return {
+        "loop": loop,
+        "bones": [{
+            "aj_flags": 0x1234,
+            "animation": {
+                "flags": 1,
+                "end_frame": 10.0,
+                "has_joint_target": False,
+                "frames": [{
+                    "type": 2,
+                    "start_frame": 0.0,
+                    "frac_value": 0x66,
+                    "frac_slope": 0x87,
+                    "raw_ad": b"\x11\x22",
+                }],
+            },
+        }],
+    }
+
+
+def test_source_animation_encoder_preserves_loop_metadata():
+    encoded = _encode_source_hsd_animation(
+        _source_animation_snapshot(loop=True))
+    assert json.loads(encoded)["loop"] is True
+
+
+def test_pristine_source_animation_reader_reuses_matching_pose():
+    action = _Action([
+        _FCurve('pose.bones["Root"].rotation_euler', 0,
+                [_Point(0.0, 0.0), _Point(10.0, 1.0)])
+    ])
+    action["dat_hsd_source_animation"] = _encode_source_hsd_animation(
+        _source_animation_snapshot(loop=True))
+    action["dat_hsd_source_pose_fingerprint"] = pose_action_fingerprint(action)
+
+    source = _read_pristine_source_hsd_animation(action)
+
+    assert source is not None
+    assert source["loop"] is True
+    assert source["bones"][0]["animation"]["frames"][0]["raw_ad"] == b"\x11\x22"
+
+
+def test_pristine_source_animation_reader_rejects_pose_edit():
+    action = _Action([
+        _FCurve('pose.bones["Root"].rotation_euler', 0,
+                [_Point(0.0, 0.0), _Point(10.0, 1.0)])
+    ])
+    action["dat_hsd_source_animation"] = _encode_source_hsd_animation(
+        _source_animation_snapshot(loop=True))
+    action["dat_hsd_source_pose_fingerprint"] = pose_action_fingerprint(action)
+
+    action.fcurves[0].keyframe_points[1].co = (10.0, 1.25)
+
+    assert _read_pristine_source_hsd_animation(action) is None
 
 
 def test_pose_action_fingerprint_changes_when_pose_key_changes():
