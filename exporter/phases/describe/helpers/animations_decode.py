@@ -91,6 +91,18 @@ def _actions_for_armature(all_actions, armature, armature_count):
     prefix = (armature.name.split('_skeleton_')[0]
               if '_skeleton_' in armature.name else armature.name)
 
+    imported_action_names = set()
+    raw_names = armature.get("dat_hsd_animation_action_names")
+    if isinstance(raw_names, str) and raw_names:
+        try:
+            parsed_names = json.loads(raw_names)
+            if isinstance(parsed_names, list):
+                imported_action_names = {
+                    n for n in parsed_names if isinstance(n, str) and n
+                }
+        except (ValueError, TypeError):
+            pass
+
     def _prefix_match(action):
         return action.name.startswith(prefix + '_')
 
@@ -100,6 +112,9 @@ def _actions_for_armature(all_actions, armature, armature_count):
 
     actions = []
     for action in all_actions:
+        if action.name in imported_action_names:
+            actions.append(action)
+            continue
         if action is assigned or id(action) in nla_actions:
             actions.append(action)
             continue
