@@ -6,20 +6,22 @@ geometric role (deformation target, mesh owner, ancestor of mesh, etc.)
 becomes derivable.
 """
 try:
-    from .....shared.IR.enums import SkinType
+    from .....shared.IR.enums import SkinType, CoordType
     from .....shared.IR.fog import IRFog
     from .....shared.Constants.hsd import (
         JOBJ_SKELETON, JOBJ_SKELETON_ROOT, JOBJ_ENVELOPE_MODEL,
-        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
+        JOBJ_LIGHTING, JOBJ_TEXGEN, JOBJ_SPECULAR,
+        JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
         JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_ROOT_XLU, JOBJ_HIDDEN,
     )
     from .....shared.helpers.logger import StubLogger
 except (ImportError, SystemError):
-    from shared.IR.enums import SkinType
+    from shared.IR.enums import SkinType, CoordType
     from shared.IR.fog import IRFog
     from shared.Constants.hsd import (
         JOBJ_SKELETON, JOBJ_SKELETON_ROOT, JOBJ_ENVELOPE_MODEL,
-        JOBJ_LIGHTING, JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
+        JOBJ_LIGHTING, JOBJ_TEXGEN, JOBJ_SPECULAR,
+        JOBJ_OPA, JOBJ_TEXEDGE, JOBJ_XLU,
         JOBJ_ROOT_OPA, JOBJ_ROOT_TEXEDGE, JOBJ_ROOT_XLU, JOBJ_HIDDEN,
     )
     from shared.helpers.logger import StubLogger
@@ -78,6 +80,8 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
     bones_with_envelope = set()
     bones_with_texedge = set()
     bones_with_opa = set()
+    bones_with_texgen = set()
+    bones_with_specular = set()
     for ir_mesh in meshes:
         bone_idx = ir_mesh.parent_bone_index
         if bone_idx < len(bones):
@@ -90,6 +94,18 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
                 bones_with_texedge.add(bone_idx)
             else:
                 bones_with_opa.add(bone_idx)
+
+            if mat is not None:
+                if getattr(mat, 'enable_specular', False):
+                    bones_with_specular.add(bone_idx)
+                # HSD needs the joint's TEXGEN state when texture coordinates
+                # are generated from something other than the mesh UVs. This
+                # is what stock Sample uses for its reflection maps.
+                if any(
+                    getattr(layer, 'coord_type', CoordType.UV) != CoordType.UV
+                    for layer in (getattr(mat, 'texture_layers', None) or [])
+                ):
+                    bones_with_texgen.add(bone_idx)
 
     bone_name_to_idx = {b.name: i for i, b in enumerate(bones)}
     deformation_bones = set()
@@ -150,6 +166,10 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
 
         if i in bones_with_meshes:
             flags |= JOBJ_LIGHTING
+            if i in bones_with_texgen:
+                flags |= JOBJ_TEXGEN
+            if i in bones_with_specular:
+                flags |= JOBJ_SPECULAR
             # Imported Chibi-Robo DATs keep their authored draw pass. New
             # Blender-authored bones fall back to material-derived flags.
             if source_flags is None or not (source_flags & draw_pass_mask):
@@ -186,5 +206,9 @@ def refine_bone_flags(bones, meshes, logger=StubLogger()):
         if i not in deformation_bones:
             bone.inverse_bind_matrix = None
 
-    logger.debug("  Refined bone flags for %d bones (%d with meshes, %d deformation, %d envelope)",
-                 len(bones), len(bones_with_meshes), len(deformation_bones), len(bones_with_envelope))
+    logger.debug(
+        "  Refined bone flags for %d bones (%d with meshes, %d deformation, "
+        "%d envelope, %d texgen, %d specular)",
+        len(bones), len(bones_with_meshes), len(deformation_bones),
+        len(bones_with_envelope), len(bones_with_texgen),
+        len(bones_with_specular))
