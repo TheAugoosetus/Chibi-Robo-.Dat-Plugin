@@ -8,6 +8,11 @@ the digest changes and the exporter falls back to rebuilding HSD data.
 import hashlib
 import struct
 
+from ..Constants.hsd import JOBJ_SKELETON, JOBJ_SKELETON_ROOT
+
+
+_NORMAL_COORD_HSD_FLAG_MASK = JOBJ_SKELETON | JOBJ_SKELETON_ROOT
+
 
 def _put_text(h, value):
     data = str(value).encode("utf-8", "surrogatepass")
@@ -175,7 +180,11 @@ def mesh_normal_fingerprint(mesh_obj):
                 flags = bone.get("dat_hsd_flags")
             except (AttributeError, TypeError):
                 flags = None
-            _put_text(h, "" if flags is None else int(flags))
+            _put_text(
+                h,
+                "" if flags is None
+                else int(flags) & _NORMAL_COORD_HSD_FLAG_MASK,
+            )
     else:
         _put_text(h, "")
         h.update(struct.pack(">I", 0))
