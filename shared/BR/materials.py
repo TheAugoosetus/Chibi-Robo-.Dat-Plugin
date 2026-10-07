@@ -90,3 +90,4 @@ class BRMaterial:
     # a white helper RGB node), so imported materials carry this hint.
     source_color_source: str | None = None
     source_alpha_source: str | None = None
+    source_routing_pristine: bool = False
