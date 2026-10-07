@@ -37,6 +37,10 @@ class BRMesh:
     color_layers: list[BRColorLayer] = field(default_factory=list)
     normals: list[tuple[float, float, float]] | None = None
     source_normals: list[tuple[float, float, float]] | None = None
+    # True only when `normals` came directly from untouched exact DAT
+    # metadata and are already in the source PObject's bind/local space.
+    # False means the normals are editable presentation/world-space values.
+    normals_are_source_local: bool = False
     vertex_groups: list[BRVertexGroup] = field(default_factory=list)
     parent_bone_name: str | None = None  # records mesh → bone ownership
     is_hidden: bool = False
