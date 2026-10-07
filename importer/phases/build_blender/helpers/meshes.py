@@ -135,13 +135,15 @@ def _build_mesh(br_mesh, armature, logger, mesh_idx, material=None):
     # values as compressed object metadata. Post-process stamps the edit
     # fingerprint only after its coordinate-system bake has finished.
     #
-    # Deliberately restrict this passthrough to RIGID/SINGLE_BONE. For an HSD
-    # envelope (WEIGHTED), importer describe has already transformed the
-    # display normals through the per-envelope inverse-transpose matrix, while
-    # source_normals still describe the original pre-deformation DAT vectors.
-    # Reusing those local vectors directly from Blender would therefore put
-    # edited/exported normals in the wrong coordinate space. Lossless weighted
-    # normal passthrough needs a matched inverse-normal-deformation path first.
+    # Deliberately persist this exact side-channel only for
+    # RIGID/SINGLE_BONE. WEIGHTED display normals are envelope-deformed for
+    # Blender, while source_normals remain original DAT bind/local vectors.
+    # Our current edit fingerprint covers mesh geometry/normals/transform but
+    # not vertex-group weights or armature bind matrices, so it cannot yet
+    # prove a weighted source payload is still valid after editing. Weighted
+    # Blender exports therefore rebuild bind-space normals from the editable
+    # deformed normals; direct IR/node round-trips may still reuse the exact
+    # source channel because no Blender edit boundary was crossed.
     if (br_mesh.source_normals
             and br_mesh.source_skin_type in ("RIGID", "SINGLE_BONE")
             and len(br_mesh.source_normals) == len(mesh_data.loops)):
