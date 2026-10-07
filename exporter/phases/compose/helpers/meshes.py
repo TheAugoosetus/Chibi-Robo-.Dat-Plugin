@@ -301,15 +301,27 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     # already moved them into the deformed world frame for Blender; reverse
     # that here before writing the DAT normal stream.
     export_normals = ir_mesh.normals
-    if is_envelope and ir_mesh.normals and bones:
+    source_normals = getattr(ir_mesh, 'source_normals', None)
+    loop_count = sum(len(face) for face in ir_mesh.faces)
+    can_reuse_exact_rigid_normals = (
+        bw
+        and bw.type in (SkinType.SINGLE_BONE, SkinType.RIGID)
+        and source_normals
+        and len(source_normals) == loop_count
+    )
+    if can_reuse_exact_rigid_normals:
+        # Untouched imported RIGID/SINGLE_BONE normals are already exact DAT
+        # bind/local values. Reuse them before any owner transform so S8/S16
+        # fixed-point magnitudes can round-trip byte-for-byte.
+        export_normals = source_normals
+    elif is_envelope and ir_mesh.normals and bones:
         export_normals = _undeform_normals(
             ir_mesh.normals, ir_mesh.faces, envelope_map,
             bones, bone_name_to_index, ir_mesh.parent_bone_index)
     elif (bw
           and bw.type in (SkinType.SINGLE_BONE, SkinType.RIGID)
           and ir_mesh.normals
-          and bones
-          and not getattr(ir_mesh, 'normals_are_source_local', False)):
+          and bones):
         bone_idx = ir_mesh.parent_bone_index
         if bone_idx < len(bones) and bones[bone_idx].world_matrix:
             export_normals = _undeform_rigid_normals(
