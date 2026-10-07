@@ -782,6 +782,14 @@ def _br_image_to_ir(br_image, cache):
         palette_id=0,
         gx_format_override=gx_format,
         palette_format_override=palette_format,
+        source_raw_image_data=getattr(br_image, "source_raw_image_data", None),
+        source_raw_palette_data=getattr(br_image, "source_raw_palette_data", None),
+        source_format_id=getattr(br_image, "source_format_id", None),
+        source_palette_format_id=getattr(
+            br_image, "source_palette_format_id", None),
+        source_palette_entry_count=getattr(
+            br_image, "source_palette_entry_count", 0),
+        source_pixel_hash=getattr(br_image, "source_pixel_hash", None),
     )
     cache[key] = ir_image
     return ir_image
