@@ -84,6 +84,8 @@ def plan_meshes(br_meshes, br_materials, ir_bones, logger=StubLogger(),
                 for cl in br_mesh.color_layers
             ],
             normals=list(br_mesh.normals) if br_mesh.normals else None,
+            normals_are_source_local=getattr(
+                br_mesh, 'normals_are_source_local', False),
             material=ir_material,
             bone_weights=bone_weights,
             is_hidden=br_mesh.is_hidden,
