@@ -5,10 +5,12 @@ from shared.Constants.gx import (
     GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_TEX0,
     GX_INDEX8, GX_S8, GX_NRM_XYZ,
 )
-from shared.BR.materials import BRNode, BRNodeGraph, BRLink
+from shared.BR.materials import BRMaterial, BRNode, BRNodeGraph, BRLink
 from shared.IR.enums import ColorSource
 from importer.phases.describe.helpers.meshes import _extract_normals
-from exporter.phases.plan.helpers.materials import _GraphView, _detect_color_sources
+from exporter.phases.plan.helpers.materials import (
+    _GraphView, _detect_color_sources, plan_material,
+)
 from exporter.phases.compose.helpers.meshes import _encode_indexed_source_numeric
 from exporter.phases.compose.helpers.meshes import _build_pobj
 
@@ -156,3 +158,33 @@ def test_editing_vertex_only_material_helper_falls_back_to_both():
     )
     assert color_source == ColorSource.BOTH
     assert alpha_source == ColorSource.BOTH
+
+
+def _routing_material(pristine, diffuse=(1.0, 1.0, 1.0, 1.0), alpha=1.0):
+    view = _routing_view(diffuse=diffuse, alpha=alpha)
+    return BRMaterial(
+        name="routing",
+        node_graph=view.graph,
+        source_color_source="VERTEX",
+        source_alpha_source="VERTEX",
+        source_routing_pristine=pristine,
+    )
+
+
+def test_plan_uses_vertex_only_source_hint_only_while_routing_is_pristine():
+    ir = plan_material(_routing_material(True), logger=_Logger())
+    assert ir.color_source == ColorSource.VERTEX
+    assert ir.alpha_source == ColorSource.VERTEX
+
+
+def test_plan_ignores_stale_vertex_only_source_hint_after_graph_edit():
+    ir = plan_material(
+        _routing_material(
+            False,
+            diffuse=(0.5, 0.5, 0.5, 1.0),
+            alpha=0.5,
+        ),
+        logger=_Logger(),
+    )
+    assert ir.color_source == ColorSource.BOTH
+    assert ir.alpha_source == ColorSource.BOTH
