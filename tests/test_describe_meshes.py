@@ -414,8 +414,10 @@ class TestCollectAttributeLayers:
             face_lists=[[[0, 1, 2]]] * 4,
         ))
         face_lists_copy = [list(fl) for fl in pobj.face_lists]
-        uvs, colors, normals = _collect_attribute_layers(pobj, face_lists_copy, [[0, 1, 2]])
+        uvs, colors, normals, source_normals = _collect_attribute_layers(
+            pobj, face_lists_copy, [[0, 1, 2]])
         assert len(uvs) == 1 and uvs[0].name == 'uvtex_0'
         assert normals is not None and len(normals) == 3
+        assert source_normals == [(0.0, 0.0, 1.0)] * 3
         names = [c.name for c in colors]
         assert 'color_0' in names and 'alpha_0' in names
