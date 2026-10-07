@@ -13,6 +13,10 @@ class IRMesh:
     uv_layers: list[IRUVLayer] = field(default_factory=list)
     color_layers: list[IRColorLayer] = field(default_factory=list)
     normals: list[tuple[float, float, float]] | None = None
+    # Exact decoded source normal values before Blender/unit normalization.
+    # Used only for untouched imported meshes; edited meshes export Blender's
+    # effective normals instead.
+    source_normals: list[tuple[float, float, float]] | None = None
     material: object = None  # IRMaterial, typed loosely to avoid circular import
     bone_weights: IRBoneWeights | None = None
     shape_keys: list[IRShapeKey] | None = None
