@@ -74,3 +74,47 @@ def pose_action_fingerprint(action):
             _put_float(h, kp.handle_right[1])
 
     return h.hexdigest()
+
+
+def mesh_normal_fingerprint(mesh_obj):
+    """Fingerprint geometry state that can change an exported normal stream.
+
+    The source-normal passthrough is valid only while topology, vertex
+    positions, effective corner normals, and object transform are unchanged.
+    UV/color edits intentionally do not invalidate it.
+    """
+    h = hashlib.sha256()
+    mesh = mesh_obj.data
+
+    vertices = list(mesh.vertices)
+    h.update(struct.pack(">I", len(vertices)))
+    for vertex in vertices:
+        _put_float(h, vertex.co[0])
+        _put_float(h, vertex.co[1])
+        _put_float(h, vertex.co[2])
+
+    polygons = list(mesh.polygons)
+    h.update(struct.pack(">I", len(polygons)))
+    for poly in polygons:
+        verts = list(poly.vertices)
+        h.update(struct.pack(">I", len(verts)))
+        for index in verts:
+            h.update(struct.pack(">I", int(index)))
+
+    if hasattr(mesh, "corner_normals"):
+        normals = [cn.vector for cn in mesh.corner_normals]
+    else:
+        mesh.calc_normals_split()
+        normals = [loop.normal for loop in mesh.loops]
+    h.update(struct.pack(">I", len(normals)))
+    for normal in normals:
+        _put_float(h, normal[0])
+        _put_float(h, normal[1])
+        _put_float(h, normal[2])
+
+    matrix = mesh_obj.matrix_world
+    for row in range(4):
+        for col in range(4):
+            _put_float(h, matrix[row][col])
+
+    return h.hexdigest()
