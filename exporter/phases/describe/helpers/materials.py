@@ -19,11 +19,13 @@ try:
         BRMaterial, BRNodeGraph, BRNode, BRLink, BRImage,
     )
     from .....shared.helpers.logger import StubLogger
+    from .....shared.helpers.blender_fingerprint import material_routing_fingerprint
 except (ImportError, SystemError):
     from shared.BR.materials import (
         BRMaterial, BRNodeGraph, BRNode, BRLink, BRImage,
     )
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import material_routing_fingerprint
 
 
 # Node attributes the plan-side decoder reads — captured into BRNode.properties
@@ -70,6 +72,11 @@ def describe_material(blender_mat, logger=StubLogger(),
         dedup_key=(id(blender_mat),),
         source_color_source=blender_mat.get("dat_hsd_color_source"),
         source_alpha_source=blender_mat.get("dat_hsd_alpha_source"),
+        source_routing_pristine=(
+            isinstance(blender_mat.get("dat_hsd_source_routing_fingerprint"), str)
+            and blender_mat.get("dat_hsd_source_routing_fingerprint")
+                == material_routing_fingerprint(blender_mat)
+        ),
     )
 
     if cache is not None:
