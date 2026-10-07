@@ -68,6 +68,8 @@ def describe_material(blender_mat, logger=StubLogger(),
         use_backface_culling=blender_mat.use_backface_culling,
         blend_method=getattr(blender_mat, 'blend_method', None),
         dedup_key=(id(blender_mat),),
+        source_color_source=blender_mat.get("dat_hsd_color_source"),
+        source_alpha_source=blender_mat.get("dat_hsd_alpha_source"),
     )
 
     if cache is not None:
