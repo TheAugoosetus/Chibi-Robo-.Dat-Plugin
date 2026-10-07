@@ -96,3 +96,25 @@ def test_instance_offset_is_baked_into_private_geometry():
     shared_data.copy.assert_called_once()
     assert copy.data is shared_data.copy.return_value  # reassigned to private copy
     copy.data.transform.assert_called_once_with(model.mesh_instances[0].matrix_local)
+
+
+def test_instance_copy_discards_template_source_normal_metadata():
+    """A transformed JOBJ_INSTANCE cannot reuse the template's exact HSD
+    normal payload: those normals belong to the template placement.  The copy
+    must fall back to its transformed Blender normals on export."""
+    original = _mesh_obj_with_armature_modifier()
+    copy = original.copy.return_value
+    normal_keys = {
+        "dat_hsd_source_normals_b64",
+        "dat_hsd_source_normal_count",
+        "dat_hsd_source_normal_fingerprint",
+    }
+    remaining = set(normal_keys)
+    copy.__contains__.side_effect = remaining.__contains__
+    copy.__delitem__.side_effect = remaining.remove
+
+    _run_build(_model_with_one_instance(), original)
+
+    assert remaining == set()
+    for key in normal_keys:
+        copy.__delitem__.assert_any_call(key)
