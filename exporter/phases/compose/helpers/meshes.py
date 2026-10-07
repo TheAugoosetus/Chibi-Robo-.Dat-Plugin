@@ -309,9 +309,10 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     if can_reuse_exact_source_normals:
         # source_normals are defined as exact DAT bind/local vectors. Direct
         # node/IR round-trips can therefore reuse them for any skin type.
-        # Blender currently persists this exact channel only for pristine
-        # RIGID/SINGLE_BONE meshes; weighted Blender exports arrive here with
-        # source_normals=None and take the inverse-envelope path below.
+        # Blender round-trips also carry this channel while the source-normal
+        # fingerprint proves geometry and skinning state are still pristine;
+        # edited meshes arrive with source_normals=None and take the appropriate
+        # rigid/envelope inverse-transform path below.
         export_normals = source_normals
     elif is_envelope and ir_mesh.normals and bones:
         export_normals = _undeform_normals(
