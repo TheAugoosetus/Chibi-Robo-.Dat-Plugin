@@ -80,10 +80,14 @@ that has **not** yet been folded into the score tables below:
 
 Targeted regressions were added for the coordinate transforms, exact S8 normal
 bytes, weighted/rigid preservation, fingerprint invalidation, material-routing
-invalidation, instance invalidation, and post-bake animation fingerprint
-refresh. A branch CI workflow was also added, but the current GitHub connection
-has not produced an Actions run yet; do not treat the score table as updated or
-the new pass as fully executed until pytest and the real-file corpus sweep run.
+invalidation, instance invalidation, post-bake animation fingerprint refresh,
+source-animation pose-edit invalidation, and source-animation loop metadata.
+
+The branch CI workflow now passes **140/140 targeted pure-Python regressions**
+on commit `4362623091fe`. This validates the preservation/control-flow layer
+without requiring Blender or game files. The score table below is intentionally
+unchanged: the real-file corpus sweep still needs to be rerun before the
+aggregate NBN/NIN/BBB/IBI/BNB figures can be updated.
 
 ## Test Results
 
