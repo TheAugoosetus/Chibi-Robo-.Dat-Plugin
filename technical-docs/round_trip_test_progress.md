@@ -51,6 +51,40 @@ The comparators skip these field categories so the score reflects model data, no
 
 ---
 
+## Current branch changes awaiting a full corpus re-sweep
+
+The `chibi-robo/core-roundtrip` branch now carries a source-preservation pass
+that has **not** yet been folded into the score tables below:
+
+- Normal handling now keeps two explicit representations: editable/display
+  `normals` and exact decoded DAT `source_normals`.
+- RIGID/SINGLE_BONE normals are transformed into the owner JOBJ presentation
+  frame on import and returned to PObject-local space on rebuilt export.
+- WEIGHTED normals now reverse the importer envelope inverse-transpose before
+  rebuilt export instead of writing deformed Blender normals as bind-space DAT
+  data.
+- Untouched imported meshes can reuse exact fixed-point source normals,
+  including WEIGHTED meshes. The preservation fingerprint covers topology,
+  positions, effective normals, object transform, skin type, owner bone,
+  vertex-group weights, armature rest data, and preserved HSD skeleton flags;
+  relevant edits invalidate the exact side-channel and fall back to rebuild.
+- Blender-object normal export now uses the proper inverse-transpose matrix
+  under non-uniform scale.
+- Transformed JOBJ_INSTANCE copies invalidate template source-normal metadata.
+- Chibi source-skeleton fingerprints are refreshed after Phase 6's import
+  coordinate bake so an untouched import does not disable raw compressed HSD
+  animation passthrough merely because the importer canonicalized its rest
+  data.
+- `source_normals` is excluded from BBB/IBI scoring as preservation metadata;
+  the actual editable/renderable `normals` channel remains scored.
+
+Targeted regressions were added for the coordinate transforms, exact S8 normal
+bytes, weighted/rigid preservation, fingerprint invalidation, material-routing
+invalidation, instance invalidation, and post-bake animation fingerprint
+refresh. A branch CI workflow was also added, but the current GitHub connection
+has not produced an Actions run yet; do not treat the score table as updated or
+the new pass as fully executed until pytest and the real-file corpus sweep run.
+
 ## Test Results
 
 **Overall export pipeline completion (80 character/Pokémon models): ✅ 92.7%** _(weighted: NBN 20% × 100.0 + NIN 35% × 90.1 + BBB 15% × 83.8 + IBI 25% × 95.4 + BNB 5% × 95.7)_
