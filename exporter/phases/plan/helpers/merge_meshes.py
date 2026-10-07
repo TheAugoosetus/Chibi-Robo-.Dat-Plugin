@@ -47,6 +47,7 @@ def _merge_key(m):
         _layer_names(m.uv_layers),
         _layer_names(m.color_layers),
         m.normals is None,
+        getattr(m, 'normals_are_source_local', False),
         m.shape_keys is not None and len(m.shape_keys) > 0,
         _weights_shape(m.bone_weights),
         tuple(
@@ -122,6 +123,8 @@ def _clone_seed(m):
         color_layers=[IRColorLayer(name=c.name, colors=list(c.colors))
                       for c in m.color_layers],
         normals=list(m.normals) if m.normals is not None else None,
+        normals_are_source_local=getattr(
+            m, 'normals_are_source_local', False),
         material=m.material,
         bone_weights=_concat_bone_weights(None, m.bone_weights, 0),
         shape_keys=m.shape_keys,
