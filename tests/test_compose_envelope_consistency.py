@@ -17,6 +17,7 @@ from exporter.phases.compose.helpers.meshes import (
     _canonicalize_weights,
     _find_skeleton_bone,
     _undeform_vertices,
+    _undeform_normals,
 )
 from shared.Constants.hsd import JOBJ_SKELETON, JOBJ_SKELETON_ROOT
 
@@ -217,6 +218,49 @@ class TestUndeformRoundTrip:
         assert abs(redeformed[0][0] - world[0][0]) < 1e-4
         assert abs(redeformed[0][1] - world[0][1]) < 1e-4
         assert abs(redeformed[0][2] - world[0][2]) < 1e-4
+
+
+# ---------------------------------------------------------------------------
+# Envelope normal un-deform
+# ---------------------------------------------------------------------------
+
+class TestUndeformNormalRoundTrip:
+    def test_forward_inverse_transpose_then_export_reverse_returns_bind_normal(self):
+        # A non-uniformly scaled + rotated envelope catches the important
+        # distinction between position math and normal math.
+        world_matrix = [
+            [0.0, -1.0, 0.0, 0.0],
+            [2.0,  0.0, 0.0, 0.0],
+            [0.0,  0.0, 1.0, 0.0],
+            [0.0,  0.0, 0.0, 1.0],
+        ]
+        bone = _FakeBone("A", world_matrix, _identity_4x4())
+        bones = [bone]
+        bone_map = {"A": 0}
+        env_map = _build_envelope_map(
+            [(0, [("A", 1.0)])], bone_map)
+
+        bind_normal = Vector((1.0, 1.0, 0.0)).normalized()
+
+        # Mirror import describe: world_normal = inverse(M)^T * bind_normal.
+        normal_matrix = Matrix(world_matrix).to_3x3()
+        normal_matrix.invert()
+        normal_matrix.transpose()
+        world_normal = (
+            normal_matrix.to_4x4() @ bind_normal
+        ).normalized()
+
+        restored = _undeform_normals(
+            [tuple(world_normal)],
+            [[0]],
+            env_map,
+            bones,
+            bone_map,
+            0,
+        )
+
+        for got, expected in zip(restored[0], bind_normal):
+            assert abs(got - expected) < 1e-6
 
 
 # ---------------------------------------------------------------------------
