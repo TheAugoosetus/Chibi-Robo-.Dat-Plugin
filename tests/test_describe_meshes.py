@@ -7,6 +7,7 @@ from importer.phases.describe.helpers.meshes import (
     _walk_joints, _walk_mesh_chain, _describe_pobj,
     _resolve_material, _validated_face_lists, _collect_attribute_layers,
     _fabricate_missing_color_layers, _world_transform_vertices,
+    _world_transform_normals,
 )
 from shared.IR.geometry import IRUVLayer, IRColorLayer
 from shared.Constants.gx import GX_VA_POS
@@ -387,6 +388,32 @@ class TestWorldTransformVertices:
         out = _world_transform_vertices(verts, m)
         assert all(abs(a - b) < 1e-6 for a, b in zip(out[0], (10.0, 20.0, 30.0)))
         assert all(abs(a - b) < 1e-6 for a, b in zip(out[1], (11.0, 20.0, 30.0)))
+
+
+class TestWorldTransformNormals:
+    def test_nonuniform_scale_uses_inverse_transpose(self):
+        # Local normal (1,1,0), owner scales X by 2. Correct world normal is
+        # proportional to (0.5,1,0), not (2,1,0).
+        m = [
+            [2.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        out = _world_transform_normals([(1.0, 1.0, 0.0)], m)
+        assert abs(out[0][0] - 0.4472135955) < 1e-6
+        assert abs(out[0][1] - 0.8944271910) < 1e-6
+        assert abs(out[0][2]) < 1e-6
+
+    def test_translation_does_not_change_normal(self):
+        m = [
+            [1.0, 0.0, 0.0, 10.0],
+            [0.0, 1.0, 0.0, 20.0],
+            [0.0, 0.0, 1.0, 30.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+        out = _world_transform_normals([(0.0, 1.0, 0.0)], m)
+        assert out == [(0.0, 1.0, 0.0)]
 
 
 class TestCollectAttributeLayers:
