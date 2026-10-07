@@ -10,7 +10,7 @@ implies must be the exact inverse of the blend matrix used to un-deform the
 vertex. Weight limiting and quantisation are the prepare script's job;
 compose only renormalises against floating-point drift.
 """
-from mathutils import Matrix, Vector
+from shared.helpers.math_shim import Matrix, Vector
 
 from exporter.phases.compose.helpers.meshes import (
     _build_envelope_map,
@@ -243,9 +243,9 @@ class TestUndeformNormalRoundTrip:
         bind_normal = Vector((1.0, 1.0, 0.0)).normalized()
 
         # Mirror import describe: world_normal = inverse(M)^T * bind_normal.
-        normal_matrix = Matrix(world_matrix).to_3x3()
-        normal_matrix.invert()
-        normal_matrix.transpose()
+        normal_matrix = (
+            Matrix(world_matrix).to_3x3().inverted().transposed()
+        )
         world_normal = (
             normal_matrix.to_4x4() @ bind_normal
         ).normalized()
