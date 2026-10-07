@@ -305,6 +305,15 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
         export_normals = _undeform_normals(
             ir_mesh.normals, ir_mesh.faces, envelope_map,
             bones, bone_name_to_index, ir_mesh.parent_bone_index)
+    elif (bw
+          and bw.type in (SkinType.SINGLE_BONE, SkinType.RIGID)
+          and ir_mesh.normals
+          and bones
+          and not getattr(ir_mesh, 'normals_are_source_local', False)):
+        bone_idx = ir_mesh.parent_bone_index
+        if bone_idx < len(bones) and bones[bone_idx].world_matrix:
+            export_normals = _undeform_rigid_normals(
+                ir_mesh.normals, bones[bone_idx].world_matrix)
 
 
     # Vertices are already in GC units — the pre-scale pass in compose_scene
@@ -686,6 +695,24 @@ def _undeform_normals(normals, faces, envelope_map, bones,
 
     return result
 
+
+
+def _undeform_rigid_normals(normals, world_matrix):
+    """Move edited rigid normals from owner-JOBJ world space back to local.
+
+    Import uses inverse(M)^T to move local normals into world space. The
+    inverse of that normal transform is M^T. Translation never participates.
+    Untouched exact source normals bypass this helper because they are already
+    local and retain their original fixed-point magnitudes.
+    """
+    reverse_normal = Matrix(world_matrix).to_3x3().transposed().to_4x4()
+    result = []
+    for normal in normals:
+        restored = reverse_normal @ Vector(normal)
+        if restored.length > 0:
+            restored.normalize()
+        result.append(tuple(restored))
+    return result
 
 def _get_invbind_matrix(bone_index, bones):
     """Walk up the bone hierarchy to find the nearest inverse bind matrix."""
