@@ -9,6 +9,11 @@ import base64
 import bpy
 import numpy as np
 
+try:
+    from .....shared.helpers.blender_fingerprint import material_routing_fingerprint
+except (ImportError, SystemError):
+    from shared.helpers.blender_fingerprint import material_routing_fingerprint
+
 
 def build_material(br_material, image_cache=None):
     """Create a Blender material from a BRMaterial spec.
@@ -69,6 +74,12 @@ def build_material(br_material, image_cache=None):
         from_socket = _resolve_socket(from_node.outputs, link.from_output)
         to_socket = _resolve_socket(to_node.inputs, link.to_input)
         links.new(from_socket, to_socket)
+
+    if (br_material.source_color_source is not None
+            or br_material.source_alpha_source is not None):
+        mat["dat_hsd_source_routing_fingerprint"] = (
+            material_routing_fingerprint(mat)
+        )
 
     return mat
 
