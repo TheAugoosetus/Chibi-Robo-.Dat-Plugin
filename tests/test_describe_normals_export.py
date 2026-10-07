@@ -14,7 +14,10 @@ their normals for HSD texture-coordinate generation.
 """
 from types import SimpleNamespace
 
-from exporter.phases.describe.helpers.meshes import _extract_normals
+from exporter.phases.describe.helpers.meshes import (
+    _extract_normals, _normal_matrix_for_transform,
+)
+from shared.helpers.math_shim import Matrix, Vector
 
 
 class _Identity:
@@ -60,3 +63,32 @@ def test_uniform_color_attribute_does_not_suppress_normals():
     mesh = _mesh([(0.0, 0.0, 1.0)], color_attributes=[uniform])
     out = _extract_normals(mesh, _Identity())
     assert out == [(0.0, 0.0, 1.0)]
+
+
+def test_object_nonuniform_scale_uses_inverse_transpose_normal_matrix():
+    xform = Matrix.Identity(4)
+    xform[0][0] = 2.0
+
+    normal_matrix = _normal_matrix_for_transform(xform)
+    result = (
+        normal_matrix.to_4x4() @ Vector((1.0, 1.0, 0.0)).normalized()
+    ).normalized()
+
+    # Correct inverse-transpose of scale(2,1,1): (1,1,0) -> (0.5,1,0).
+    assert abs(result.x - 0.4472135955) < 1e-6
+    assert abs(result.y - 0.8944271910) < 1e-6
+    assert abs(result.z) < 1e-6
+
+
+def test_object_translation_does_not_affect_normal_matrix():
+    xform = Matrix.Identity(4)
+    xform[0][3] = 10.0
+    xform[1][3] = -20.0
+    xform[2][3] = 30.0
+
+    normal_matrix = _normal_matrix_for_transform(xform)
+    result = normal_matrix.to_4x4() @ Vector((0.0, 1.0, 0.0))
+
+    assert abs(result.x) < 1e-6
+    assert abs(result.y - 1.0) < 1e-6
+    assert abs(result.z) < 1e-6
