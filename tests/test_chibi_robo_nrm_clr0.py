@@ -1,12 +1,16 @@
 """Chibi-Robo NRM+CLR0 geometry regressions."""
 
-from shared.IR.geometry import IRMesh, IRUVLayer, IRColorLayer
+from types import SimpleNamespace
+
+from shared.IR.geometry import (
+    IRMesh, IRUVLayer, IRColorLayer, IRBoneWeights,
+)
 from shared.Constants.gx import (
     GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_TEX0,
     GX_INDEX8, GX_S8, GX_NRM_XYZ,
 )
 from shared.BR.materials import BRMaterial, BRNode, BRNodeGraph, BRLink
-from shared.IR.enums import ColorSource
+from shared.IR.enums import ColorSource, SkinType
 from importer.phases.describe.helpers.meshes import _extract_normals
 from exporter.phases.plan.helpers.materials import (
     _GraphView, _detect_color_sources, plan_material,
@@ -98,6 +102,52 @@ def test_source_fixed_point_normal_is_not_destroyed_by_blender_normalization_pat
     _unique, indices, raw = encoded
     assert indices == [0]
     assert raw == bytes((31, 246, 54))
+
+
+def test_exact_rigid_local_normal_bypasses_owner_reverse_transform():
+    source = (31 / 64, -10 / 64, 54 / 64)
+    fmt = {
+        "attribute": GX_VA_NRM,
+        "attribute_type": GX_INDEX8,
+        "component_count": GX_NRM_XYZ,
+        "component_type": GX_S8,
+        "component_frac": 6,
+        "stride": 3,
+    }
+    mesh = IRMesh(
+        name="rigid_exact",
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        faces=[[0, 1, 2]],
+        normals=[source, source, source],
+        normals_are_source_local=True,
+        bone_weights=IRBoneWeights(
+            type=SkinType.RIGID,
+            bone_name="root",
+        ),
+        parent_bone_index=0,
+        source_vertex_formats=[fmt],
+    )
+    owner_world = [
+        [2.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    bones = [SimpleNamespace(world_matrix=owner_world)]
+
+    pobjs = _build_pobj(mesh, [], bones, {"root": 0}, _Logger())
+    nrm_desc = next(
+        desc for desc in pobjs[0].vertex_list.vertices
+        if desc.attribute == GX_VA_NRM
+    )
+
+    # If compose incorrectly applied M^T here, the X component would change.
+    # Untouched exact DAT-local normals must retain the original S8:6 bytes.
+    assert nrm_desc.raw_vertex_data == bytes((31, 246, 54))
 
 
 def _routing_view(diffuse=(1.0, 1.0, 1.0, 1.0), alpha=1.0):
