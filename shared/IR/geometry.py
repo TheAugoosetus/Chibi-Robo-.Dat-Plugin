@@ -22,6 +22,10 @@ class IRMesh:
     # untouched RIGID/SINGLE_BONE imports; WEIGHTED passthrough needs a paired
     # source-normal space conversion before it can be lossless.
     source_normals: list[tuple[float, float, float]] | None = None
+    # Coordinate-space tag for `normals` itself. True means the current
+    # normal list is already exact source PObject-local data and compose must
+    # not apply the owning bone/envelope inverse transform a second time.
+    normals_are_source_local: bool = False
     material: object = None  # IRMaterial, typed loosely to avoid circular import
     bone_weights: IRBoneWeights | None = None
     shape_keys: list[IRShapeKey] | None = None
