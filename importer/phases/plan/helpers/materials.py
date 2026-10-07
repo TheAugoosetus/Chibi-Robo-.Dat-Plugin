@@ -588,6 +588,12 @@ def _to_br_image(ir_image):
                             if ir_image.gx_format_override else None),
         palette_format_override=(ir_image.palette_format_override.value
                                  if ir_image.palette_format_override else None),
+        source_raw_image_data=getattr(ir_image, "source_raw_image_data", None),
+        source_raw_palette_data=getattr(ir_image, "source_raw_palette_data", None),
+        source_format_id=getattr(ir_image, "source_format_id", None),
+        source_palette_format_id=getattr(ir_image, "source_palette_format_id", None),
+        source_palette_entry_count=getattr(ir_image, "source_palette_entry_count", 0),
+        source_pixel_hash=getattr(ir_image, "source_pixel_hash", None),
     )
 
 
