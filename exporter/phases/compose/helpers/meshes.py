@@ -401,8 +401,15 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
         vertex_descs.append(clr_desc)
         vertex_buffers.append(('color', clr_verts, clr_indices))
 
-    # Chibi-Robo legitimately uses NRM and CLR attributes together. Keep both
-    # when present; the HSD/GX renderer consumes the full descriptor list.
+    # GX consumes vertex fields in canonical attribute order (matrix indices,
+    # POS, NRM/NBT, CLR0/1, TEX0..7), regardless of the order in which
+    # GXSetVtxDesc() calls are made. Keep our descriptor/buffer arrays in that
+    # same order so the bytes written to each display-list vertex record match
+    # what the hardware expects. This matters for Chibi-Robo's NRM+CLR0+TEX0
+    # PObjects: building UVs before colors would otherwise write TEX0 before
+    # CLR0 even though GX decodes CLR0 first.
+    vertex_descs, vertex_buffers = _sort_vertex_attributes(
+        vertex_descs, vertex_buffers)
 
     # Determine cull flags (shared across all split PObjects)
     cull_flags = POBJ_CULLBACK
@@ -456,6 +463,22 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
                  skin_type, pobj.flags)
 
     return [pobj]
+
+
+def _sort_vertex_attributes(vertex_descs, vertex_buffers):
+    """Return descriptor/buffer lists in canonical GX attribute order.
+
+    GX vertex data has a fixed field order determined by attribute number.
+    The HSD descriptor array may be walked in any order to configure VCD/VAT
+    state, but display-list records themselves must still follow GX order.
+    """
+    if len(vertex_descs) != len(vertex_buffers):
+        raise ValueError("vertex descriptor/buffer arrays are out of sync")
+    pairs = sorted(
+        zip(vertex_descs, vertex_buffers),
+        key=lambda pair: int(pair[0].attribute),
+    )
+    return [p[0] for p in pairs], [p[1] for p in pairs]
 
 
 def _make_pobj_node(vertex_descs, raw_dl, cull_flags):
