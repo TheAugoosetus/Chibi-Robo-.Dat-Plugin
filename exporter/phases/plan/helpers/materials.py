@@ -87,7 +87,11 @@ def plan_material(br_material, logger=StubLogger(), image_cache=None,
 
     shininess, enable_specular = _extract_specular_settings(principled)
 
-    color_source, alpha_source = _detect_color_sources(view)
+    color_source, alpha_source = _detect_color_sources(
+        view,
+        source_color_source=getattr(br_material, 'source_color_source', None),
+        source_alpha_source=getattr(br_material, 'source_alpha_source', None),
+    )
     texture_layers = _extract_texture_layers(
         view, logger, image_cache, uv_layer_names,
     )
@@ -304,29 +308,87 @@ def _linear_to_srgb_rgba(color):
     )
 
 
-def _detect_color_sources(view):
-    """Detect whether colours come from material, vertex layers, or
-    both. Driven by the presence of ``ShaderNodeAttribute`` nodes
-    pointing at the importer's ``color_0`` / ``alpha_0`` attributes."""
-    has_vertex_color = False
-    has_vertex_alpha = False
-    for n in view.find_nodes('ShaderNodeAttribute'):
-        attr = n.properties.get('attribute_name', '')
-        if attr == 'color_0':
-            has_vertex_color = True
-        elif attr == 'alpha_0':
-            has_vertex_alpha = True
+def _detect_color_sources(view, source_color_source=None,
+                          source_alpha_source=None):
+    """Recover HSD material-vs-vertex routing from the Blender graph.
 
-    rgb_nodes = view.find_nodes('ShaderNodeRGB')
-    if has_vertex_color:
-        color_source = ColorSource.BOTH if rgb_nodes else ColorSource.VERTEX
-    else:
+    Imported HSD materials carry their original routing because Blender's
+    editable graph is not always semantically unique. In particular, a lit
+    VERTEX-only diffuse source needs a white DiffuseColor helper in Blender;
+    a naive node-count heuristic mistakes that helper for HSD BOTH.
+
+    The source hint is used only while its characteristic vertex Attribute
+    node remains connected. For VERTEX-only routing, the importer's material
+    helper must also remain neutral (white RGB / alpha 1). Editing that helper
+    automatically falls back to semantic graph inference.
+    """
+    color_attr_nodes = [
+        n for n in view.find_nodes('ShaderNodeAttribute')
+        if n.properties.get('attribute_name', '') == 'color_0'
+        and view.outgoing_from(n.name)
+    ]
+    alpha_attr_nodes = [
+        n for n in view.find_nodes('ShaderNodeAttribute')
+        if n.properties.get('attribute_name', '') == 'alpha_0'
+        and view.outgoing_from(n.name)
+    ]
+    has_vertex_color = bool(color_attr_nodes)
+    has_vertex_alpha = bool(alpha_attr_nodes)
+
+    diffuse_helper = view.nodes_by_name.get('DiffuseColor')
+    alpha_helper = view.nodes_by_name.get('AlphaValue')
+
+    def _source_enum(raw):
+        try:
+            return ColorSource(raw) if raw is not None else None
+        except (ValueError, TypeError):
+            return None
+
+    def _white_diffuse_helper():
+        if diffuse_helper is None:
+            return True
+        color = diffuse_helper.properties.get('color')
+        if color is None or len(color) < 3:
+            return False
+        return all(abs(float(color[i]) - 1.0) <= 1e-6 for i in range(3))
+
+    def _unit_alpha_helper():
+        if alpha_helper is None:
+            return True
+        value = alpha_helper.properties.get('value')
+        return value is not None and abs(float(value) - 1.0) <= 1e-6
+
+    source_color = _source_enum(source_color_source)
+    if source_color == ColorSource.MATERIAL and not has_vertex_color:
         color_source = ColorSource.MATERIAL
-
-    if has_vertex_alpha:
-        alpha_source = ColorSource.BOTH if has_vertex_color else ColorSource.VERTEX
+    elif source_color == ColorSource.VERTEX and has_vertex_color and _white_diffuse_helper():
+        color_source = ColorSource.VERTEX
+    elif source_color == ColorSource.BOTH and has_vertex_color:
+        color_source = ColorSource.BOTH
     else:
+        has_material_color = diffuse_helper is not None or bool(
+            view.find_nodes('ShaderNodeRGB'))
+        if has_vertex_color:
+            color_source = (
+                ColorSource.BOTH if has_material_color else ColorSource.VERTEX)
+        else:
+            color_source = ColorSource.MATERIAL
+
+    source_alpha = _source_enum(source_alpha_source)
+    if source_alpha == ColorSource.MATERIAL and not has_vertex_alpha:
         alpha_source = ColorSource.MATERIAL
+    elif source_alpha == ColorSource.VERTEX and has_vertex_alpha and _unit_alpha_helper():
+        alpha_source = ColorSource.VERTEX
+    elif source_alpha == ColorSource.BOTH and has_vertex_alpha:
+        alpha_source = ColorSource.BOTH
+    else:
+        has_material_alpha = alpha_helper is not None
+        if has_vertex_alpha:
+            alpha_source = (
+                ColorSource.BOTH if has_material_alpha else ColorSource.VERTEX)
+        else:
+            alpha_source = ColorSource.MATERIAL
+
     return color_source, alpha_source
 
 
