@@ -303,16 +303,15 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     export_normals = ir_mesh.normals
     source_normals = getattr(ir_mesh, 'source_normals', None)
     loop_count = sum(len(face) for face in ir_mesh.faces)
-    can_reuse_exact_rigid_normals = (
-        bw
-        and bw.type in (SkinType.SINGLE_BONE, SkinType.RIGID)
-        and source_normals
-        and len(source_normals) == loop_count
+    can_reuse_exact_source_normals = (
+        source_normals and len(source_normals) == loop_count
     )
-    if can_reuse_exact_rigid_normals:
-        # Untouched imported RIGID/SINGLE_BONE normals are already exact DAT
-        # bind/local values. Reuse them before any owner transform so S8/S16
-        # fixed-point magnitudes can round-trip byte-for-byte.
+    if can_reuse_exact_source_normals:
+        # source_normals are defined as exact DAT bind/local vectors. Direct
+        # node/IR round-trips can therefore reuse them for any skin type.
+        # Blender currently persists this exact channel only for pristine
+        # RIGID/SINGLE_BONE meshes; weighted Blender exports arrive here with
+        # source_normals=None and take the inverse-envelope path below.
         export_normals = source_normals
     elif is_envelope and ir_mesh.normals and bones:
         export_normals = _undeform_normals(
