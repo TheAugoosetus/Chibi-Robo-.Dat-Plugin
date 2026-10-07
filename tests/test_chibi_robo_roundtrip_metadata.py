@@ -7,6 +7,7 @@ from shared.IR.skeleton import IRBone
 from shared.IR.geometry import IRMesh
 from shared.Constants.hsd import (
     JOBJ_TEXGEN, JOBJ_SPECULAR, JOBJ_XLU, JOBJ_ROOT_XLU,
+    JOBJ_LIGHTING, JOBJ_OPA, JOBJ_ROOT_OPA,
 )
 from exporter.phases.plan.helpers.armature import plan_armature
 from exporter.phases.plan.helpers.meshes import _pack_bone_weights
@@ -75,6 +76,28 @@ def test_refine_flags_does_not_drop_chibi_render_flags():
     refine_bone_flags([bone], [mesh])
 
     assert bone.flags == source
+
+
+def test_sample_reflective_joint_flags_survive_exactly():
+    # Stock sample.dat reflective mesh owners use this combination:
+    # ROOT_OPA | OPA | SPECULAR | TEXGEN | LIGHTING = 0x10050180.
+    source = (
+        JOBJ_ROOT_OPA | JOBJ_OPA | JOBJ_SPECULAR |
+        JOBJ_TEXGEN | JOBJ_LIGHTING
+    )
+    assert source == 0x10050180
+
+    bone = _ir_bone(source)
+    bone.mesh_indices = [0]
+    mesh = IRMesh(
+        name="sample_reflective_body",
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[],
+        parent_bone_index=0,
+    )
+
+    refine_bone_flags([bone], [mesh])
+    assert bone.flags == 0x10050180
 
 
 def test_rigid_source_skin_type_survives_full_weight_vertex_group():
