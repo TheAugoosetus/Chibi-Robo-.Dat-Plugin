@@ -160,14 +160,15 @@ def test_unannotated_vertex_groups_remain_weighted():
     assert weights.type == SkinType.WEIGHTED
 
 
-def test_export_plan_preserves_exact_normal_coordinate_space():
+def test_export_plan_preserves_exact_source_normal_channel():
+    exact = [(31 / 64, -10 / 64, 54 / 64)]
     br_mesh = BRMesh(
         name="rigid",
         id="mesh_0_root",
         vertices=[(0.0, 0.0, 0.0)],
         faces=[],
-        normals=[(31 / 64, -10 / 64, 54 / 64)],
-        normals_are_source_local=True,
+        normals=[(0.0, 0.0, 1.0)],
+        source_normals=exact,
         vertex_groups=[
             BRVertexGroup(name="root", assignments=[(0, 1.0)]),
         ],
@@ -178,5 +179,6 @@ def test_export_plan_preserves_exact_normal_coordinate_space():
     ir_meshes = plan_export_meshes([br_mesh], [], [_ir_bone(0)])
 
     assert len(ir_meshes) == 1
-    assert ir_meshes[0].normals_are_source_local is True
+    assert ir_meshes[0].normals == [(0.0, 0.0, 1.0)]
+    assert ir_meshes[0].source_normals == exact
     assert ir_meshes[0].bone_weights.type == SkinType.RIGID
