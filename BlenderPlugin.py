@@ -41,6 +41,17 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
         ],
         default='CHIBI_ROBO',
     )
+    chibi_animation_mode: EnumProperty(
+        name='Chibi Animation Import',
+        description='How Chibi-Robo bone animations are brought into Blender.',
+        items=[
+            ('PRESERVE', 'Preserve Only (Fast)',
+             'Keep the original compressed HSD bone animation for lossless export without building editable pose F-curves. Best for model/material editing.'),
+            ('EDITABLE', 'Editable (Slow)',
+             'Bake Chibi-Robo bone animation into Blender pose F-curves so it can be previewed and edited. Large character DATs can take several minutes.'),
+        ],
+        default='PRESERVE',
+    )
     colo_xd_kind: EnumProperty(
         name='Colo/XD Kind',
         description='What kind of Colosseum/XD container is being imported. PKX models carry a header that selects animation-slot labels; raw .dat models do not.',
@@ -68,6 +79,8 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
         layout.prop(self, "game")
         if self.game == 'COLO_XD':
             layout.prop(self, "colo_xd_kind")
+        if self.game == 'CHIBI_ROBO':
+            layout.prop(self, "chibi_animation_mode")
         layout.prop(self, "setup_workspace")
         layout.prop(self, "import_lights")
         layout.prop(self, "import_cameras")
@@ -115,6 +128,10 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
             "import_cameras": self.import_cameras or filename.lower().endswith('.cam'),
             "include_shiny": True,
             "game": self.game,
+            "chibi_animation_mode": (
+                self.chibi_animation_mode if self.game == 'CHIBI_ROBO'
+                else 'EDITABLE'
+            ),
             "colo_xd_kind": self.colo_xd_kind if self.game == 'COLO_XD' else None,
         }
 
