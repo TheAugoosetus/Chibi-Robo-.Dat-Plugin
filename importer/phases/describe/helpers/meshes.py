@@ -161,7 +161,9 @@ def _describe_pobj(pobj, joint, bone_index, count,
     )
 
     if bone_weights and bone_weights.type in (SkinType.RIGID, SkinType.SINGLE_BONE):
-        verts_out = _world_transform_vertices(verts_out, bones[bone_index].world_matrix)
+        owner_world = bones[bone_index].world_matrix
+        verts_out = _world_transform_vertices(verts_out, owner_world)
+        normals = _world_transform_normals(normals, owner_world)
 
     source_vertex_formats = [
         {
@@ -277,6 +279,27 @@ def _world_transform_vertices(vertices, world_matrix):
     """
     parent_world = Matrix(world_matrix)
     return [tuple(parent_world @ Vector(v)) for v in vertices]
+
+
+def _world_transform_normals(normals, world_matrix):
+    """Transform PObject-local normals into the owning JOBJ's world frame.
+
+    Normals are directions rather than positions, so translation is ignored.
+    Under non-uniform scale the correct transform is inverse(M)^T, not M.
+    Exact `source_normals` are intentionally not passed here; they remain in
+    DAT-local space for lossless untouched round-trips.
+    """
+    if not normals:
+        return normals
+    normal_matrix = Matrix(world_matrix).to_3x3().inverted().transposed()
+    normal_matrix = normal_matrix.to_4x4()
+    result = []
+    for normal in normals:
+        transformed = normal_matrix @ Vector(normal)
+        if transformed.length > 0:
+            transformed.normalize()
+        result.append(tuple(transformed))
+    return result
 
 
 def _validate_mesh(face_lists, faces):
