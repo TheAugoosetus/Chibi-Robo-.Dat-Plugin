@@ -118,3 +118,89 @@ def mesh_normal_fingerprint(mesh_obj):
             _put_float(h, matrix[row][col])
 
     return h.hexdigest()
+
+
+def material_routing_fingerprint(material):
+    """Fingerprint shader state relevant to HSD color/alpha routing.
+
+    Node positions and image pixel contents are intentionally excluded.
+    Structural edits, links, routing-node properties, and socket defaults are
+    included so original HSD source hints cannot silently override a modified
+    Blender material.
+    """
+    h = hashlib.sha256()
+    tree = getattr(material, "node_tree", None)
+    if tree is None:
+        return h.hexdigest()
+
+    relevant_props = (
+        "operation", "blend_type", "attribute_name", "uv_map",
+        "extension", "interpolation",
+    )
+
+    nodes = sorted(list(tree.nodes), key=lambda n: (n.name, n.bl_idname))
+    h.update(struct.pack(">I", len(nodes)))
+    for node in nodes:
+        _put_text(h, node.name)
+        _put_text(h, node.bl_idname)
+        for prop in relevant_props:
+            if hasattr(node, prop):
+                _put_text(h, prop)
+                _put_text(h, getattr(node, prop))
+
+        for socket in list(node.inputs):
+            _put_text(h, "I")
+            _put_text(h, socket.identifier)
+            h.update(b"\x01" if socket.is_linked else b"\x00")
+            if not socket.is_linked and hasattr(socket, "default_value"):
+                _fingerprint_socket_value(h, socket.default_value)
+
+        # RGB and Value nodes store their editable constant on outputs.
+        if node.bl_idname in ("ShaderNodeRGB", "ShaderNodeValue"):
+            for socket in list(node.outputs):
+                _put_text(h, "O")
+                _put_text(h, socket.identifier)
+                if hasattr(socket, "default_value"):
+                    _fingerprint_socket_value(h, socket.default_value)
+
+    links = sorted(
+        list(tree.links),
+        key=lambda link: (
+            link.from_node.name, link.from_socket.identifier,
+            link.to_node.name, link.to_socket.identifier,
+        ),
+    )
+    h.update(struct.pack(">I", len(links)))
+    for link in links:
+        _put_text(h, link.from_node.name)
+        _put_text(h, link.from_socket.identifier)
+        _put_text(h, link.to_node.name)
+        _put_text(h, link.to_socket.identifier)
+
+    return h.hexdigest()
+
+
+def _fingerprint_socket_value(h, value):
+    if isinstance(value, (str, bool, int)):
+        _put_text(h, value)
+        return
+    if isinstance(value, float):
+        _put_float(h, value)
+        return
+    if hasattr(value, "__len__"):
+        try:
+            seq = list(value)
+        except TypeError:
+            _put_text(h, repr(value))
+            return
+        h.update(struct.pack(">I", len(seq)))
+        for item in seq:
+            try:
+                _put_float(h, item)
+            except (TypeError, ValueError):
+                _put_text(h, item)
+        return
+    try:
+        _put_float(h, value)
+    except (TypeError, ValueError):
+        _put_text(h, repr(value))
