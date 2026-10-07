@@ -19,6 +19,7 @@ try:
         BRMesh, BRMeshInstance, BRUVLayer, BRColorLayer, BRVertexGroup,
     )
     from .....shared.helpers.logger import StubLogger
+    from .....shared.helpers.blender_fingerprint import mesh_normal_fingerprint
     from .materials import describe_material
     from ...plan.helpers.materials import plan_material
 except (ImportError, SystemError):
@@ -26,6 +27,7 @@ except (ImportError, SystemError):
         BRMesh, BRMeshInstance, BRUVLayer, BRColorLayer, BRVertexGroup,
     )
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
     from exporter.phases.describe.helpers.materials import describe_material
     from exporter.phases.plan.helpers.materials import plan_material
 
@@ -140,7 +142,12 @@ def _describe_mesh_object(mesh_obj, bone_names, logger,
         (attr.name, [tuple(cd.color) for cd in attr.data])
         for attr in mesh_data.color_attributes
     ]
-    all_normals = _extract_normals(mesh_data, normal_xform)
+    source_normals = _pristine_source_normals(mesh_obj, logger)
+    all_normals = (
+        source_normals
+        if source_normals is not None
+        else _extract_normals(mesh_data, normal_xform)
+    )
 
     per_vertex_groups = _extract_vertex_groups(mesh_obj, bone_names)
     parent_bone_name = _determine_parent_bone_name(
@@ -276,28 +283,48 @@ def _build_submesh(mesh_name, mat_index, num_materials,
     return br_mesh, br_material
 
 
-def _extract_normals(mesh_data, normal_xform):
-    """Per-loop normals in the GameCube frame, or None.
+def _pristine_source_normals(mesh_obj, logger):
+    """Return exact imported HSD normals when the editable mesh is unchanged.
 
-    Normals and vertex colors are mutually exclusive per PObject in the game
-    corpus (no shipped PObject carries both): a lit mesh carries normals, a
-    vertex-coloured mesh carries colors. So skip normals only when the mesh
-    carries *meaningful* (per-vertex-varying) colors — a uniform colour
-    attribute is a material-level default that compose drops, so it must NOT
-    suppress normals (gating on attribute presence alone left imported models,
-    which all ship a uniform white `Color`, with neither normals nor colors).
-    Otherwise extract from `corner_normals`, which reflects the mesh's
-    effective shading — custom split normals when present, else the normals
-    computed from face/smooth shading.
-
-    Gating on `has_custom_normals` (as this once did) silently dropped
-    normals for every from-scratch mesh that hadn't had custom normals
-    authored, so its LIT material had nothing to light and rendered
-    black/missing in-game even though Blender — which computes its own
-    normals — looked correct.
+    Blender stores custom normals as unit vectors, so simply reading
+    corner_normals cannot reproduce the original fixed-point values exactly.
+    The importer keeps those values in an internal CORNER vector attribute and
+    fingerprints the visible geometry/normal state. Any topology, position,
+    normal, or object-transform edit invalidates the shortcut.
     """
-    # Chibi-Robo stock DATs can carry both NRM and CLR0. Reflection-mapped
-    # materials also require normals for HSD texture-coordinate generation.
+    baseline = mesh_obj.get("dat_hsd_source_normal_fingerprint")
+    if not isinstance(baseline, str) or not baseline:
+        return None
+
+    source_attr = mesh_obj.data.attributes.get(".dat_hsd_source_normal")
+    if source_attr is None or source_attr.domain != 'CORNER':
+        return None
+    if len(source_attr.data) != len(mesh_obj.data.loops):
+        return None
+
+    if mesh_normal_fingerprint(mesh_obj) != baseline:
+        logger.debug(
+            "  Mesh '%s': source normals invalidated by geometry/normal edit",
+            mesh_obj.name)
+        return None
+
+    logger.debug(
+        "  Mesh '%s': reusing %d exact source HSD corner normals",
+        mesh_obj.name, len(source_attr.data))
+    return [tuple(item.vector) for item in source_attr.data]
+
+
+def _extract_normals(mesh_data, normal_xform):
+    """Return Blender's effective per-loop normals in the GameCube frame.
+
+    NRM and CLR0 are independent GX attributes and may coexist. Chibi-Robo
+    uses that combination extensively: normals feed lighting/reflection while
+    CLR0 can independently feed diffuse RGB and/or alpha.
+
+    For imported untouched DATs, _pristine_source_normals() runs first so
+    fixed-point source values can round-trip exactly. This function is the
+    editable fallback for new or modified meshes.
+    """
     if hasattr(mesh_data, 'corner_normals'):
         raw = [cn.vector for cn in mesh_data.corner_normals]
     else:
