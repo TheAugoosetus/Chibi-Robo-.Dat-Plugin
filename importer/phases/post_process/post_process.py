@@ -23,8 +23,10 @@ import bpy
 
 try:
     from ....shared.helpers.logger import StubLogger
+    from ....shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
+    from shared.helpers.blender_fingerprint import mesh_normal_fingerprint
 
 
 _COLO_XD_KIND_TO_MODEL_TYPE = {
@@ -71,6 +73,7 @@ def post_process(armature_names, shiny_params=None, options=None, logger=StubLog
             if obj is not None and obj.type == 'ARMATURE'
         ]
     bake_imported_transforms(bake_targets, logger=logger)
+    _stamp_source_normal_fingerprints(bake_targets, logger)
 
     if build_results:
         # New pipeline path: use actions directly from Phase 5
@@ -124,6 +127,30 @@ def post_process(armature_names, shiny_params=None, options=None, logger=StubLog
                     start, end, len(ranges))
     scene.frame_set(scene.frame_start)
     logger.info("=== Phase 6 complete ===")
+
+
+def _stamp_source_normal_fingerprints(armatures, logger=StubLogger()):
+    """Stamp exact-normal change detectors after import coordinate baking.
+
+    Source HSD normal payloads are written during mesh construction, but the
+    post-process may still rotate/bake mesh data. Fingerprinting earlier would
+    mark every untouched import as modified. Stamp only after that bake.
+    """
+    count = 0
+    armature_ids = {id(arm) for arm in armatures if arm is not None}
+    for obj in bpy.data.objects:
+        if obj.type != 'MESH' or obj.parent is None:
+            continue
+        if id(obj.parent) not in armature_ids:
+            continue
+        if not obj.get("dat_hsd_source_normals_b64"):
+            continue
+        obj["dat_hsd_source_normal_fingerprint"] = mesh_normal_fingerprint(obj)
+        count += 1
+    if count:
+        logger.debug(
+            "  Stamped source-normal fingerprints on %d imported mesh(es)",
+            count)
 
 
 def _bone_frame_range(action):
