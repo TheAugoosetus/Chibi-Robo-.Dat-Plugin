@@ -186,7 +186,7 @@ class ImportHSD(bpy.types.Operator, ImportHelper):
 
 
 class ExportHSD(bpy.types.Operator, ExportHelper):
-    """Export selected armature(s) as a DAT model"""
+    """Export the scene as a GameCube DAT/PKX model."""
     bl_idname = "export_model.chibi_robo_dat"
     bl_label = "Export Chibi-Robo DAT v%s" % PLUGIN_VERSION
 
@@ -205,7 +205,10 @@ class ExportHSD(bpy.types.Operator, ExportHelper):
 
     @classmethod
     def poll(cls, context):
-        return any(obj.type == 'ARMATURE' for obj in context.scene.objects)
+        return any(
+            obj.type in ('ARMATURE', 'MESH')
+            for obj in context.scene.objects
+        )
 
     def execute(self, context):
         from .exporter.exporter import Exporter
