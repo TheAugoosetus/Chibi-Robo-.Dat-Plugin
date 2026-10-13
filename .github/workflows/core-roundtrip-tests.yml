@@ -38,3 +38,22 @@ jobs:
           tests/test_chibi_robo_source_animation.py
           tests/test_armatureless_static_export.py
           tests/test_version_consistency.py
+
+  blender-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Blender Python
+        run: python -m pip install --upgrade pip bpy==4.5.7 numpy pillow
+
+      - name: Export armatureless DAT with real bpy
+        run: python tests/integration/run_armatureless_static_bpy.py
+
