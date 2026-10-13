@@ -13,6 +13,49 @@ except (ImportError, SystemError):
     from shared.helpers.logger import StubLogger
 
 
+# Blender edit-space matrix whose GameCube conversion is identity.
+# plan_armature applies a -90-degree X conversion; this +90-degree X
+# matrix cancels it so the synthesized root JOBJ has identity SRT.
+_STATIC_ROOT_EDIT_MATRIX = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, -1.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+]
+
+
+def make_static_root_armature(name="StaticModel"):
+    """Build BR data for a one-JOBJ static model with no Blender armature.
+
+    Armatureless Blender scenes still need one HSD Joint because DObjects/PObjects
+    attach to a JOBJ at runtime. This creates that format-level root without
+    requiring the user to author a meaningless one-bone rig in Blender.
+    """
+    root = BRBone(
+        name="Root",
+        parent_index=None,
+        edit_matrix=[list(row) for row in _STATIC_ROOT_EDIT_MATRIX],
+        tail_offset=(0.0, 0.0, 1.0),
+        inherit_scale="ALIGNED",
+        rotation_mode="XYZ",
+        use_connect=False,
+        is_hidden=False,
+        source_hsd_flags=None,
+    )
+    return BRArmature(
+        name=name,
+        bones=[root],
+        display_type="OCTAHEDRAL",
+        matrix_basis=[
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        custom_props={},
+    )
+
+
 def describe_armature(armature, logger=StubLogger()):
     """Read a Blender armature into a BRArmature.
 

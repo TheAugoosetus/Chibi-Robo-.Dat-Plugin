@@ -104,6 +104,52 @@ def describe_meshes(armature, br_armature, logger=StubLogger(), image_cache=None
     return br_meshes, [], br_materials, blender_materials
 
 
+def describe_static_meshes(mesh_objects, root_bone_name="Root",
+                           logger=StubLogger(), image_cache=None):
+    """Describe armatureless static meshes under one synthetic root JOBJ.
+
+    The mesh objects may have ordinary Blender object transforms; _describe_mesh_object
+    bakes matrix_world into the exported vertex/normal data. Every resulting
+    PObject is explicitly RIGID and owned by the synthesized root.
+    """
+    bone_names = {root_bone_name}
+    material_cache = {}
+    if image_cache is None:
+        image_cache = {}
+    br_materials = []
+    material_dedup = {}
+    br_meshes = []
+    blender_materials = []
+
+    for mesh_obj in sorted(mesh_objects, key=_mesh_sort_key):
+        meshes_for_obj, mats_for_obj = _describe_mesh_object(
+            mesh_obj, bone_names, logger, material_cache, image_cache,
+        )
+        for br_mesh, br_mat in zip(meshes_for_obj, mats_for_obj):
+            br_mesh.parent_bone_name = root_bone_name
+            br_mesh.source_skin_type = "RIGID"
+            if br_mat is None:
+                br_mesh.material_index = None
+            else:
+                key = id(br_mat)
+                if key not in material_dedup:
+                    material_dedup[key] = len(br_materials)
+                    br_materials.append(br_mat)
+                br_mesh.material_index = material_dedup[key]
+            br_meshes.append(br_mesh)
+            blender_materials.append(_blender_material_for(mesh_obj, br_mesh))
+
+    digit_width = len(str(max(len(br_meshes) - 1, 0)))
+    for i, br_mesh in enumerate(br_meshes):
+        br_mesh.id = "mesh_%s_%s" % (
+            str(i).zfill(digit_width), root_bone_name)
+
+    logger.info(
+        "  Described %d armatureless static mesh(es) under synthetic root '%s'",
+        len(br_meshes), root_bone_name)
+    return br_meshes, [], br_materials, blender_materials
+
+
 # Blender Z-up → GameCube Y-up. Vertices/normals stay in Blender frame in
 # BR; plan applies this on the way to IR.
 _COORD_ROTATION_INV = Matrix.Rotation(math.pi / 2, 4, [1.0, 0.0, 0.0]).inverted()

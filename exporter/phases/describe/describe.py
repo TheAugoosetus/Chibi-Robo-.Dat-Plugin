@@ -20,8 +20,8 @@ try:
     from ....shared.BR.scene import BRScene, BRModel
     from ....shared.BR.fog import BRFog
     from ....shared.helpers.logger import StubLogger
-    from .helpers.armature import describe_armature
-    from .helpers.meshes import describe_meshes
+    from .helpers.armature import describe_armature, make_static_root_armature
+    from .helpers.meshes import describe_meshes, describe_static_meshes
     from .helpers.animations import describe_actions
     from .helpers.constraints import describe_constraints
     from .helpers.lights import describe_lights
@@ -39,8 +39,8 @@ except (ImportError, SystemError):
     from shared.BR.scene import BRScene, BRModel
     from shared.BR.fog import BRFog
     from shared.helpers.logger import StubLogger
-    from exporter.phases.describe.helpers.armature import describe_armature
-    from exporter.phases.describe.helpers.meshes import describe_meshes
+    from exporter.phases.describe.helpers.armature import describe_armature, make_static_root_armature
+    from exporter.phases.describe.helpers.meshes import describe_meshes, describe_static_meshes
     from exporter.phases.describe.helpers.animations import describe_actions
     from exporter.phases.describe.helpers.constraints import describe_constraints
     from exporter.phases.describe.helpers.lights import describe_lights
@@ -70,10 +70,21 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
     logger.info("=== Export Phase 1: Describe Blender Scene ===")
 
     armatures = [obj for obj in context.scene.objects if obj.type == 'ARMATURE']
+    static_mesh_objects = (
+        [obj for obj in context.scene.objects if obj.type == 'MESH']
+        if not armatures else []
+    )
     if not armatures:
-        raise ValueError(
-            "No armatures in the scene. The scene must contain at least one armature to export."
-        )
+        if output_ext == 'pkx':
+            raise ValueError(
+                "Armatureless export supports static DAT models only; PKX output "
+                "still requires an armature with PKX metadata."
+            )
+        if not static_mesh_objects:
+            raise ValueError(
+                "No armatures or mesh objects in the scene. Nothing can be exported."
+            )
+        _validate_armatureless_static_meshes(static_mesh_objects)
 
     # Note: baked-transforms validation lives in pre_process (user-facing,
     # runs before the pipeline starts) and in plan (BR-side defense-in-depth).
@@ -83,14 +94,18 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
     use_bezier = options.get('sparsify_bezier', True)
 
     br_models = []
-    # One image cache spans all armatures so a bpy Image datablock shared
-    # across models is serialised into a single BRImage (pixel readback is
-    # the expensive part; sharing also lets plan/compose dedup downstream).
+    # One image cache spans all models so a bpy Image datablock shared
+    # across them is serialised into a single BRImage.
     image_cache = {}
-    for armature in armatures:
-        logger.info("  Processing armature '%s'", armature.name)
-        br_model = _describe_one_model(armature, use_bezier, logger, image_cache)
-        br_models.append(br_model)
+    if armatures:
+        for armature in armatures:
+            logger.info("  Processing armature '%s'", armature.name)
+            br_model = _describe_one_model(armature, use_bezier, logger, image_cache)
+            br_models.append(br_model)
+    else:
+        br_models.append(
+            _describe_static_model(static_mesh_objects, logger, image_cache)
+        )
 
     # In multi-armature scenes actions attach only when bound to an armature
     # (assigned / NLA / matching OBJECT slot / name prefix) — surface any
@@ -117,7 +132,7 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
     br_scene = BRScene(models=br_models, lights=br_lights, cameras=br_cameras,
                        fogs=br_fogs)
 
-    shiny_params = extract_shiny_params(armatures, logger)
+    shiny_params = extract_shiny_params(armatures, logger) if armatures else None
 
     # Build action_name → DAT animation index from the first model's
     # action ordering (compose ultimately keys DAT animation slots off
@@ -127,12 +142,67 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
         for idx, br_action in enumerate(br_models[0].actions):
             action_name_to_index[br_action.name] = idx
 
-    pkx_header = extract_pkx_header(armatures, action_name_to_index, logger)
+    pkx_header = (
+        extract_pkx_header(armatures, action_name_to_index, logger)
+        if armatures else None
+    )
 
     logger.info("=== Export Phase 1 complete: %d model(s), %d light(s), %d camera(s), shiny=%s, pkx=%s ===",
                 len(br_scene.models), len(br_scene.lights), len(br_scene.cameras),
                 shiny_params is not None, pkx_header is not None)
     return br_scene, shiny_params, pkx_header
+
+
+def _validate_armatureless_static_meshes(mesh_objects):
+    """Reject Blender states that cannot be represented by one static JOBJ."""
+    animated = []
+    armature_modified = []
+    for obj in mesh_objects:
+        anim = getattr(obj, 'animation_data', None)
+        if anim is not None:
+            if getattr(anim, 'action', None) is not None:
+                animated.append(obj.name)
+            elif any(getattr(track, 'strips', None) for track in
+                     (getattr(anim, 'nla_tracks', None) or ())):
+                animated.append(obj.name)
+        for modifier in getattr(obj, 'modifiers', ()) or ():
+            if getattr(modifier, 'type', None) == 'ARMATURE':
+                armature_modified.append(obj.name)
+                break
+
+    if animated:
+        raise ValueError(
+            "Armatureless DAT export is static-only. Object animation found on: "
+            + ", ".join(sorted(set(animated)))
+        )
+    if armature_modified:
+        raise ValueError(
+            "Armatureless DAT export cannot preserve Armature modifiers. "
+            "Apply/remove the modifier or export with its armature. Meshes: "
+            + ", ".join(sorted(set(armature_modified)))
+        )
+
+
+def _describe_static_model(mesh_objects, logger, image_cache=None):
+    """Describe a no-armature Blender scene as one rigid HSD model."""
+    model_name = mesh_objects[0].name if len(mesh_objects) == 1 else "StaticModel"
+    br_armature = make_static_root_armature(model_name + "_HSDRoot")
+    br_meshes, _instances, br_materials, _blender_materials = (
+        describe_static_meshes(
+            mesh_objects, root_bone_name="Root", logger=logger,
+            image_cache=image_cache,
+        )
+    )
+    if not br_meshes:
+        raise ValueError(
+            "Armatureless scene contains no mesh geometry with faces to export."
+        )
+    return BRModel(
+        name=model_name,
+        armature=br_armature,
+        meshes=br_meshes,
+        materials=br_materials,
+    )
 
 
 def _describe_fogs(context, logger=StubLogger()):
