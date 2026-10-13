@@ -91,6 +91,32 @@ def test_static_guard_rejects_object_animation():
         _validate_armatureless_static_meshes([obj])
 
 
+def test_static_guard_rejects_object_driver():
+    obj = SimpleNamespace(
+        name="Driven",
+        animation_data=SimpleNamespace(
+            action=None, nla_tracks=[], drivers=[object()]
+        ),
+        data=SimpleNamespace(shape_keys=None),
+        modifiers=[],
+    )
+    with pytest.raises(ValueError, match="drivers"):
+        _validate_armatureless_static_meshes([obj])
+
+
+def test_static_guard_rejects_shape_keys():
+    obj = SimpleNamespace(
+        name="Morph",
+        animation_data=None,
+        data=SimpleNamespace(
+            shape_keys=SimpleNamespace(key_blocks=[object(), object()])
+        ),
+        modifiers=[],
+    )
+    with pytest.raises(ValueError, match="shape keys"):
+        _validate_armatureless_static_meshes([obj])
+
+
 def test_static_guard_rejects_armature_modifier():
     obj = SimpleNamespace(
         name="Skinned",
@@ -102,5 +128,8 @@ def test_static_guard_rejects_armature_modifier():
 
 
 def test_static_guard_accepts_plain_mesh():
-    obj = SimpleNamespace(name="Plain", animation_data=None, modifiers=[])
+    obj = SimpleNamespace(
+        name="Plain", animation_data=None,
+        data=SimpleNamespace(shape_keys=None), modifiers=[]
+    )
     _validate_armatureless_static_meshes([obj])

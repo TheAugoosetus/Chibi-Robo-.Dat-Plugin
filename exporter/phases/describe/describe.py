@@ -157,6 +157,7 @@ def _validate_armatureless_static_meshes(mesh_objects):
     """Reject Blender states that cannot be represented by one static JOBJ."""
     animated = []
     armature_modified = []
+    shape_keyed = []
     for obj in mesh_objects:
         anim = getattr(obj, 'animation_data', None)
         if anim is not None:
@@ -165,6 +166,15 @@ def _validate_armatureless_static_meshes(mesh_objects):
             elif any(getattr(track, 'strips', None) for track in
                      (getattr(anim, 'nla_tracks', None) or ())):
                 animated.append(obj.name)
+            elif getattr(anim, 'drivers', None):
+                animated.append(obj.name)
+
+        data = getattr(obj, 'data', None)
+        shape_keys = getattr(data, 'shape_keys', None) if data is not None else None
+        key_blocks = getattr(shape_keys, 'key_blocks', None) if shape_keys is not None else None
+        if key_blocks is not None and len(key_blocks) > 1:
+            shape_keyed.append(obj.name)
+
         for modifier in getattr(obj, 'modifiers', ()) or ():
             if getattr(modifier, 'type', None) == 'ARMATURE':
                 armature_modified.append(obj.name)
@@ -172,8 +182,13 @@ def _validate_armatureless_static_meshes(mesh_objects):
 
     if animated:
         raise ValueError(
-            "Armatureless DAT export is static-only. Object animation found on: "
-            + ", ".join(sorted(set(animated)))
+            "Armatureless DAT export is static-only. Object animation or "
+            "drivers found on: " + ", ".join(sorted(set(animated)))
+        )
+    if shape_keyed:
+        raise ValueError(
+            "Armatureless DAT export cannot preserve shape keys yet. Meshes: "
+            + ", ".join(sorted(set(shape_keyed)))
         )
     if armature_modified:
         raise ValueError(

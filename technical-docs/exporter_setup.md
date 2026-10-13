@@ -4,7 +4,7 @@
 
 The exporter writes a Blender scene to a `.dat` or `.pkx` binary that can be used in Pokemon Colosseum or Pokemon XD: Gale of Darkness. The output is not directly compatible with other games that use `.dat` models (e.g. Super Smash Bros. Melee).
 
-**Important:** The exporter exports the **entire Blender scene**, not just selected objects. All armatures, their parented meshes, lights, and cameras in the scene are included in the output (hidden cameras are skipped; hidden meshes are included and remain hidden in-game).
+**Important:** The exporter exports the **entire Blender scene**, not just selected objects. Armature-based scenes export each armature with its parented meshes. A bare `.dat` may also be exported from a static mesh-only scene with no armature; the exporter creates the required HSD root JOBJ internally. PKX output still requires an armature with PKX metadata.
 
 ---
 
@@ -28,8 +28,9 @@ What the exporter can and cannot read from your Blender scene.
 | Blender feature | Export support | Notes |
 |---|---|---|
 | Armature | ✅ Exported | Each armature becomes one model in the DAT file |
-| Mesh (parented to armature) | ✅ Exported | Must be parented to an armature |
-| Mesh (not parented) | ❌ Ignored | Parent it to an armature first |
+| Mesh (parented to armature) | ✅ Exported | Normal armature-based path |
+| Static mesh (no armature in scene) | ✅ Bare DAT only | Exporter synthesizes one root JOBJ and rigidly attaches the meshes |
+| Mesh outside an existing armature model | ❌ Ignored | Armatureless mode applies only when the scene has no armature |
 | Camera (PERSP) | ✅ Exported | Position, FOV, clip planes, target (via TRACK_TO constraint) |
 | Camera (ORTHO) | ✅ Exported | Ortho scale exported as FOV field |
 | Camera (PANO) | ❌ Ignored | No GameCube equivalent |
@@ -60,7 +61,7 @@ What the exporter can and cannot read from your Blender scene.
 | Vertex groups (multi-bone) | ✅ Envelope | The preparation script limits to up to 4 influences (default) and quantizes to 10% steps |
 | Vertex groups (single bone) | ✅ Single-bone | All verts in one group |
 | No vertex groups | ✅ Rigid | Bound to parent bone |
-| Armature modifier | ✅ Required | Must be present for skinning |
+| Armature modifier | ✅ For skinned models | Not needed for static armatureless bare-DAT export |
 
 ### Particles (GPT1)
 
@@ -143,7 +144,9 @@ Delete any objects that should not be part of the model:
 - **Default Light** — delete it (the preparation script adds proper battle lights)
 - **Default Camera** — delete it (the preparation script creates a `Debug_Camera`)
 
-Only armatures and their parented meshes should remain, plus any lights and cameras you intentionally want in the game model.
+For an armature-based model, keep the armature and its parented meshes, plus any lights and cameras you intentionally want in the game model.
+
+For a **static bare `.dat`**, the scene may instead contain meshes with no armature. The exporter creates one identity HSD root JOBJ and bakes each mesh object's current transform into its exported geometry. This path is deliberately static-only: object Actions/NLA/drivers, Armature modifiers, and non-Basis shape keys are rejected. Animated rigid Chibi-Robo models still need their JOBJ hierarchy represented by an armature.
 
 For GLB/FBX rips of stylized-face characters (modern Pokémon, Splatoon, Fire Emblem, Xenoblade, and similar), see [Eye-mask meshes on stylized-face model rips](#eye-mask-meshes-on-stylized-face-model-rips) under Notes.
 
