@@ -223,8 +223,13 @@ def _validate_armatureless_static_meshes(mesh_objects, hierarchy_objects=None):
         for material in (
                 (getattr(data, 'materials', None) or ())
                 if data is not None else ()):
-            if material is not None and _animation_data_active(
-                    getattr(material, 'animation_data', None)):
+            if material is None:
+                continue
+            node_tree = getattr(material, 'node_tree', None)
+            if (_animation_data_active(getattr(material, 'animation_data', None))
+                    or _animation_data_active(
+                        getattr(node_tree, 'animation_data', None)
+                        if node_tree is not None else None)):
                 material_animated.append(getattr(material, 'name', obj.name))
 
         for modifier in getattr(obj, 'modifiers', ()) or ():

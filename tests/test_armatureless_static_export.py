@@ -167,6 +167,58 @@ def test_static_guard_rejects_material_animation():
         _validate_armatureless_static_meshes([obj])
 
 
+def test_static_hierarchy_serializes_mesh_on_child_jobj():
+    blender_gc_identity = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    root_obj = SimpleNamespace(
+        name="Stand", type="EMPTY", parent=None,
+        matrix_world=blender_gc_identity)
+    mesh_obj = SimpleNamespace(
+        name="Sign", type="MESH", parent=root_obj,
+        matrix_world=blender_gc_identity)
+
+    arm, owners = make_static_hierarchy_armature([root_obj, mesh_obj])
+    mesh = _static_mesh()
+    mesh.parent_bone_name = owners[id(mesh_obj)]
+    mesh.id = "mesh_0_Sign"
+
+    ir_scene = plan_scene(
+        BRScene(models=[BRModel(
+            name="SignModel", armature=arm, meshes=[mesh], materials=[])]),
+        options={"merge_meshes": False},
+    )
+    roots, names = compose_scene(
+        ir_scene, options={"include_bound_box": False})
+
+    root_joint = roots[0].models[0].root_joint
+    assert root_joint.name == "Stand"
+    assert root_joint.child.name == "Sign"
+    assert root_joint.child.property is not None
+
+    raw = serialize(roots, names)
+    assert int.from_bytes(raw[0:4], "big") == len(raw)
+
+
+def test_static_guard_rejects_node_tree_material_animation():
+    node_tree = SimpleNamespace(
+        animation_data=SimpleNamespace(
+            action=object(), nla_tracks=[], drivers=[]))
+    mat = SimpleNamespace(
+        name="NodeAnimatedMaterial", animation_data=None,
+        node_tree=node_tree)
+    obj = SimpleNamespace(
+        name="Mesh", animation_data=None,
+        data=SimpleNamespace(shape_keys=None, materials=[mat]),
+        modifiers=[],
+    )
+    with pytest.raises(ValueError, match="Material animation"):
+        _validate_armatureless_static_meshes([obj])
+
+
 def test_static_guard_rejects_object_animation():
     obj = SimpleNamespace(
         name="Animated",
