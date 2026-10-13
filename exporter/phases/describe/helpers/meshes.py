@@ -105,14 +105,20 @@ def describe_meshes(armature, br_armature, logger=StubLogger(), image_cache=None
 
 
 def describe_static_meshes(mesh_objects, root_bone_name="Root",
+                           mesh_owner_names=None, bone_names=None,
                            logger=StubLogger(), image_cache=None):
-    """Describe armatureless static meshes under one synthetic root JOBJ.
+    """Describe armatureless static meshes as rigid HSD PObjects.
 
-    The mesh objects may have ordinary Blender object transforms; _describe_mesh_object
-    bakes matrix_world into the exported vertex/normal data. Every resulting
-    PObject is explicitly RIGID and owned by the synthesized root.
+    With no owner map all meshes attach to one synthetic root. With an
+    Object/Empty hierarchy, mesh_owner_names selects the JOBJ corresponding
+    to each Blender mesh object.
     """
-    bone_names = {root_bone_name}
+    if mesh_owner_names is None:
+        mesh_owner_names = {}
+    if bone_names is None:
+        bone_names = {root_bone_name}
+    else:
+        bone_names = set(bone_names)
     material_cache = {}
     if image_cache is None:
         image_cache = {}
@@ -126,7 +132,8 @@ def describe_static_meshes(mesh_objects, root_bone_name="Root",
             mesh_obj, bone_names, logger, material_cache, image_cache,
         )
         for br_mesh, br_mat in zip(meshes_for_obj, mats_for_obj):
-            br_mesh.parent_bone_name = root_bone_name
+            br_mesh.parent_bone_name = mesh_owner_names.get(
+                id(mesh_obj), root_bone_name)
             br_mesh.source_skin_type = "RIGID"
             if br_mat is None:
                 br_mesh.material_index = None
@@ -142,11 +149,13 @@ def describe_static_meshes(mesh_objects, root_bone_name="Root",
     digit_width = len(str(max(len(br_meshes) - 1, 0)))
     for i, br_mesh in enumerate(br_meshes):
         br_mesh.id = "mesh_%s_%s" % (
-            str(i).zfill(digit_width), root_bone_name)
+            str(i).zfill(digit_width),
+            br_mesh.parent_bone_name or root_bone_name,
+        )
 
     logger.info(
-        "  Described %d armatureless static mesh(es) under synthetic root '%s'",
-        len(br_meshes), root_bone_name)
+        "  Described %d armatureless static mesh(es) across %d HSD owner(s)",
+        len(br_meshes), len({m.parent_bone_name for m in br_meshes}))
     return br_meshes, [], br_materials, blender_materials
 
 
