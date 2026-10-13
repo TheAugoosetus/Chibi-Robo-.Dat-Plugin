@@ -56,6 +56,113 @@ def make_static_root_armature(name="StaticModel"):
     )
 
 
+def _static_object_matrix(matrix):
+    return [
+        [float(matrix[r][c]) for c in range(4)]
+        for r in range(4)
+    ]
+
+
+def _static_bone(name, parent_index, edit_matrix):
+    return BRBone(
+        name=name,
+        parent_index=parent_index,
+        edit_matrix=edit_matrix,
+        tail_offset=(0.0, 0.0, 1.0),
+        inherit_scale="ALIGNED",
+        rotation_mode="XYZ",
+        use_connect=False,
+        is_hidden=False,
+        source_hsd_flags=None,
+    )
+
+
+def make_static_hierarchy_armature(objects, name="StaticModel"):
+    """Map a static Blender Object/Empty parent tree to HSD JOBJs.
+
+    The input contains every MESH/EMPTY node participating in the desired
+    hierarchy. World matrices become BR edit matrices; Plan derives local JOBJ
+    SRT from parent/child world matrices without requiring an Armature object.
+    """
+    objects = list(objects)
+    if not objects:
+        return make_static_root_armature(name), {}
+
+    object_ids = {id(obj) for obj in objects}
+    roots = [
+        obj for obj in objects
+        if id(getattr(obj, "parent", None)) not in object_ids
+    ]
+
+    children = {}
+    for obj in objects:
+        parent = getattr(obj, "parent", None)
+        if id(parent) in object_ids:
+            children.setdefault(id(parent), []).append(obj)
+
+    ordered = []
+
+    def walk(obj):
+        ordered.append(obj)
+        for child in sorted(children.get(id(obj), ()), key=lambda o: o.name):
+            walk(child)
+
+    for root in sorted(roots, key=lambda o: o.name):
+        walk(root)
+
+    existing_names = {obj.name for obj in objects}
+    synthetic_root = len(roots) != 1
+    synthetic_name = "Root"
+    if synthetic_root and synthetic_name in existing_names:
+        synthetic_name = "HSDRoot"
+        suffix = 1
+        while synthetic_name in existing_names:
+            synthetic_name = "HSDRoot.%03d" % suffix
+            suffix += 1
+
+    bones = []
+    index_by_object_id = {}
+    if synthetic_root:
+        bones.append(_static_bone(
+            synthetic_name, None,
+            [list(row) for row in _STATIC_ROOT_EDIT_MATRIX],
+        ))
+
+    for obj in ordered:
+        parent_obj = getattr(obj, "parent", None)
+        if id(parent_obj) in index_by_object_id:
+            parent_index = index_by_object_id[id(parent_obj)]
+        elif synthetic_root:
+            parent_index = 0
+        else:
+            parent_index = None
+
+        index_by_object_id[id(obj)] = len(bones)
+        bones.append(_static_bone(
+            obj.name,
+            parent_index,
+            _static_object_matrix(obj.matrix_world),
+        ))
+
+    owner_names = {
+        id(obj): obj.name
+        for obj in objects
+        if getattr(obj, "type", None) == "MESH"
+    }
+    return BRArmature(
+        name=name,
+        bones=bones,
+        display_type="OCTAHEDRAL",
+        matrix_basis=[
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        custom_props={},
+    ), owner_names
+
+
 def describe_armature(armature, logger=StubLogger()):
     """Read a Blender armature into a BRArmature.
 
