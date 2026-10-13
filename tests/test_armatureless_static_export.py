@@ -8,7 +8,11 @@ from exporter.phases.describe.describe import _validate_armatureless_static_mesh
 from exporter.phases.describe.helpers.armature import make_static_root_armature
 from exporter.phases.plan.helpers.armature import plan_armature
 from exporter.phases.plan.helpers.meshes import plan_meshes
+from exporter.phases.plan.plan import plan_scene
+from exporter.phases.compose.compose import compose_scene
+from exporter.phases.serialize.serialize import serialize
 from shared.BR.meshes import BRMesh
+from shared.BR.scene import BRModel, BRScene
 from shared.Constants.hsd import JOBJ_LIGHTING, JOBJ_OPA, JOBJ_ROOT_OPA
 from shared.IR.enums import SkinType
 
@@ -45,6 +49,36 @@ def test_armatureless_mesh_plans_as_rigid_root_owned_pobj():
     assert meshes[0].parent_bone_index == 0
     assert meshes[0].bone_weights.type == SkinType.RIGID
     assert meshes[0].bone_weights.bone_name == "Root"
+
+
+def test_synthetic_static_model_serializes_valid_scene_data_dat():
+    model = BRModel(
+        name="StaticModel",
+        armature=make_static_root_armature(),
+        meshes=[_static_mesh()],
+        materials=[],
+    )
+    ir_scene = plan_scene(
+        BRScene(models=[model]),
+        options={"merge_meshes": False},
+    )
+
+    root = ir_scene.models[0].bones[0]
+    assert root.flags & JOBJ_LIGHTING
+    assert root.flags & JOBJ_OPA
+    assert root.flags & JOBJ_ROOT_OPA
+
+    roots, names = compose_scene(
+        ir_scene,
+        options={"include_bound_box": False},
+    )
+    raw = serialize(roots, names)
+
+    assert names == ["scene_data"]
+    assert len(raw) >= 0x20
+    assert int.from_bytes(raw[0:4], "big") == len(raw)
+    assert int.from_bytes(raw[0x0C:0x10], "big") == 1
+    assert raw.endswith(b"scene_data\x00")
 
 
 def test_static_guard_rejects_object_animation():
