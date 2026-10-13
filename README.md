@@ -36,7 +36,7 @@ Not every Pokemon has shiny parameters — some use a separate model for their s
 
 ## Exporting
 
-The exporter writes a Blender scene back to a `.dat` or `.pkx` binary the game can load. It supports the normal armature workflow and static mesh-only bare-`.dat` scenes; in the latter case it synthesizes the required HSD root JOBJ internally. PKX and animated rigid models still require an armature. Custom/third-party armature models use `scripts/prepare_for_pkx_export.py` or `scripts/prepare_for_dat_export.py`.
+The exporter writes a Blender scene back to a `.dat` or `.pkx` binary the game can load. It supports the normal armature workflow and static armatureless bare-`.dat` scenes; unparented meshes share a synthesized HSD root JOBJ, while explicit Mesh/Empty parenting becomes a static JOBJ hierarchy. PKX and animated rigid models still require an armature. Custom/third-party armature models use `scripts/prepare_for_pkx_export.py` or `scripts/prepare_for_dat_export.py`.
 
 See the [Exporter guide](docs/exporter.html) for the full workflow — scene preparation, export options, and getting your model back into the game. For implementation details and the supported-feature matrix, see [Exporter Setup](technical-docs/exporter_setup.md).
 

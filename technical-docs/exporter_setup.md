@@ -29,7 +29,7 @@ What the exporter can and cannot read from your Blender scene.
 |---|---|---|
 | Armature | ✅ Exported | Each armature becomes one model in the DAT file |
 | Mesh (parented to armature) | ✅ Exported | Normal armature-based path |
-| Static mesh (no armature in scene) | ✅ Bare DAT only | Exporter synthesizes one root JOBJ and rigidly attaches the meshes |
+| Static mesh (no armature in scene) | ✅ Bare DAT only | Unparented meshes share a synthetic root JOBJ; explicit Mesh/Empty parenting becomes a static JOBJ hierarchy |
 | Mesh outside an existing armature model | ❌ Ignored | Armatureless mode applies only when the scene has no armature |
 | Camera (PERSP) | ✅ Exported | Position, FOV, clip planes, target (via TRACK_TO constraint) |
 | Camera (ORTHO) | ✅ Exported | Ortho scale exported as FOV field |
@@ -39,7 +39,7 @@ What the exporter can and cannot read from your Blender scene.
 | Light (SPOT) | ✅ Exported | Color + position + target |
 | Light (AMBIENT) | ✅ Exported | POINT light with `dat_light_type = "AMBIENT"` and `energy = 0` |
 | Light (AREA) | ❌ Ignored | No GameCube equivalent |
-| Empty | ❌ Ignored | Used internally as camera/light targets |
+| Empty | ⚠️ Static DAT hierarchy | Exported as a JOBJ only when it is a Mesh/Empty ancestor in an armatureless static model; otherwise ignored |
 | Curves / Text / Volumes | ❌ Ignored | Convert to mesh first |
 
 ### Mesh data
@@ -146,7 +146,7 @@ Delete any objects that should not be part of the model:
 
 For an armature-based model, keep the armature and its parented meshes, plus any lights and cameras you intentionally want in the game model.
 
-For a **static bare `.dat`**, the scene may instead contain meshes with no armature. The exporter creates one identity HSD root JOBJ and bakes each mesh object's current transform into its exported geometry. This path is deliberately static-only: object Actions/NLA/drivers, Armature modifiers, and non-Basis shape keys are rejected. Animated rigid Chibi-Robo models still need their JOBJ hierarchy represented by an armature.
+For a **static bare `.dat`**, the scene may instead contain meshes with no armature. Unparented meshes share one synthetic identity HSD root JOBJ. If meshes use explicit Mesh/Empty parenting, that static object hierarchy becomes the JOBJ hierarchy; a common synthetic root is added only when the Blender hierarchy has multiple roots. This path is deliberately static-only: object or hierarchy Actions/NLA/drivers, material animation, Armature modifiers, and non-Basis shape keys are rejected. Animated rigid Chibi-Robo models still need their animated JOBJ hierarchy represented by an armature.
 
 For GLB/FBX rips of stylized-face characters (modern Pokémon, Splatoon, Fire Emblem, Xenoblade, and similar), see [Eye-mask meshes on stylized-face model rips](#eye-mask-meshes-on-stylized-face-model-rips) under Notes.
 

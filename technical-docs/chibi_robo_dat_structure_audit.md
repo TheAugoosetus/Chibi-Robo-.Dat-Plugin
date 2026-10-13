@@ -37,11 +37,25 @@ Blender mesh scene. The exporter synthesizes one format-level root JOBJ and
 attaches all exported PObjects rigidly to it. Blender object transforms are
 baked into the geometry, so the user does not need a fake one-bone armature.
 
-This first path is directly representative of the 134 stock static-rigid DATs
-whose model hierarchy is already one JOBJ. The 399 static-rigid multi-JOBJ DATs
-are the next structural extension: supporting them without an Armature requires
-an explicit Blender-side hierarchy representation (for example object/Empty
-parenting) rather than silently flattening meaningful JOBJ transforms.
+The first flat path is directly representative of the 134 stock static-rigid
+DATs whose model hierarchy is already one JOBJ.
+
+The 399 static-rigid multi-JOBJ DATs were then measured separately:
+
+- median 4 JOBJs per file (mean 8.41, maximum 135);
+- median 3 mesh-owning JOBJs;
+- median 1 transform-only JOBJ;
+- 265/399 have maximum hierarchy depth 1; 134 have deeper trees;
+- maximum observed depth is 11;
+- 366/399 contain at least one non-identity JOBJ SRT;
+- none of these 399 use JOBJ_INSTANCE, JOBJ_PTCL, JOBJ_SPLINE, or a non-null
+  JOBJ reference pointer.
+
+That makes ordinary Blender Object/Empty parenting a good static representation.
+The exporter now maps explicit Mesh/Empty parent trees to JOBJs while keeping
+unparented mesh-only scenes on the smaller one-root path. Multiple Blender roots
+receive one synthetic identity parent JOBJ. This preserves meaningful static
+transform hierarchy without forcing the user to create an Armature.
 
 ## Reproduction
 
