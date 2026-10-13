@@ -4,8 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from exporter.phases.describe.describe import _validate_armatureless_static_meshes
-from exporter.phases.describe.helpers.armature import make_static_root_armature
+from exporter.phases.describe.describe import (
+    _collect_static_hierarchy_objects,
+    _validate_armatureless_static_meshes,
+)
+from exporter.phases.describe.helpers.armature import (
+    make_static_root_armature,
+    make_static_hierarchy_armature,
+)
 from exporter.phases.plan.helpers.armature import plan_armature
 from exporter.phases.plan.helpers.meshes import plan_meshes
 from exporter.phases.plan.plan import plan_scene
@@ -79,6 +85,86 @@ def test_synthetic_static_model_serializes_valid_scene_data_dat():
     assert int.from_bytes(raw[0:4], "big") == len(raw)
     assert int.from_bytes(raw[0x0C:0x10], "big") == 1
     assert raw.endswith(b"scene_data\x00")
+
+
+def _m4(tx=0.0, ty=0.0, tz=0.0):
+    return [
+        [1.0, 0.0, 0.0, tx],
+        [0.0, 1.0, 0.0, ty],
+        [0.0, 0.0, 1.0, tz],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+
+
+def test_object_empty_parenting_becomes_jobj_parenting():
+    root = SimpleNamespace(
+        name="Stand", type="EMPTY", parent=None, matrix_world=_m4())
+    mesh = SimpleNamespace(
+        name="Sign", type="MESH", parent=root, matrix_world=_m4(2.0, 0.0, 0.0))
+
+    hierarchy = _collect_static_hierarchy_objects([mesh])
+    arm, owners = make_static_hierarchy_armature(hierarchy)
+    bones = plan_armature(arm)
+
+    index_by_name = {bone.name: i for i, bone in enumerate(bones)}
+    assert bones[index_by_name["Stand"]].parent_index is None
+    assert bones[index_by_name["Sign"]].parent_index == index_by_name["Stand"]
+    assert owners[id(mesh)] == "Sign"
+
+
+def test_multiple_object_roots_get_common_identity_hsd_root():
+    a = SimpleNamespace(name="A", type="MESH", parent=None, matrix_world=_m4())
+    parent = SimpleNamespace(
+        name="BParent", type="EMPTY", parent=None, matrix_world=_m4())
+    b = SimpleNamespace(
+        name="B", type="MESH", parent=parent, matrix_world=_m4())
+
+    hierarchy = _collect_static_hierarchy_objects([a, b])
+    arm, owners = make_static_hierarchy_armature(hierarchy)
+    bones = plan_armature(arm)
+
+    assert bones[0].parent_index is None
+    assert bones[0].position == pytest.approx((0.0, 0.0, 0.0), abs=1e-7)
+    assert bones[0].rotation == pytest.approx((0.0, 0.0, 0.0), abs=1e-7)
+    index_by_name = {bone.name: i for i, bone in enumerate(bones)}
+    assert bones[index_by_name["A"]].parent_index == 0
+    assert bones[index_by_name["BParent"]].parent_index == 0
+    assert bones[index_by_name["B"]].parent_index == index_by_name["BParent"]
+    assert owners[id(a)] == "A"
+    assert owners[id(b)] == "B"
+
+
+def test_static_guard_rejects_animated_hierarchy_empty():
+    root = SimpleNamespace(
+        name="AnimatedEmpty", type="EMPTY", parent=None,
+        matrix_world=_m4(),
+        animation_data=SimpleNamespace(
+            action=object(), nla_tracks=[], drivers=[]),
+    )
+    mesh = SimpleNamespace(
+        name="Mesh", type="MESH", parent=root, matrix_world=_m4(),
+        animation_data=None,
+        data=SimpleNamespace(shape_keys=None, materials=[]),
+        modifiers=[],
+    )
+    hierarchy = _collect_static_hierarchy_objects([mesh])
+    with pytest.raises(ValueError, match="AnimatedEmpty"):
+        _validate_armatureless_static_meshes([mesh], hierarchy)
+
+
+def test_static_guard_rejects_material_animation():
+    mat = SimpleNamespace(
+        name="AnimatedMaterial",
+        animation_data=SimpleNamespace(
+            action=object(), nla_tracks=[], drivers=[]),
+    )
+    obj = SimpleNamespace(
+        name="Mesh", animation_data=None,
+        data=SimpleNamespace(shape_keys=None, materials=[mat]),
+        modifiers=[],
+    )
+    with pytest.raises(ValueError, match="Material animation"):
+        _validate_armatureless_static_meshes([obj])
 
 
 def test_static_guard_rejects_object_animation():
