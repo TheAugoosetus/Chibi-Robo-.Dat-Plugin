@@ -20,7 +20,10 @@ try:
     from ....shared.BR.scene import BRScene, BRModel
     from ....shared.BR.fog import BRFog
     from ....shared.helpers.logger import StubLogger
-    from .helpers.armature import describe_armature, make_static_root_armature
+    from .helpers.armature import (
+        describe_armature, make_static_root_armature,
+        make_static_hierarchy_armature,
+    )
     from .helpers.meshes import describe_meshes, describe_static_meshes
     from .helpers.animations import describe_actions
     from .helpers.constraints import describe_constraints
@@ -39,7 +42,10 @@ except (ImportError, SystemError):
     from shared.BR.scene import BRScene, BRModel
     from shared.BR.fog import BRFog
     from shared.helpers.logger import StubLogger
-    from exporter.phases.describe.helpers.armature import describe_armature, make_static_root_armature
+    from exporter.phases.describe.helpers.armature import (
+        describe_armature, make_static_root_armature,
+        make_static_hierarchy_armature,
+    )
     from exporter.phases.describe.helpers.meshes import describe_meshes, describe_static_meshes
     from exporter.phases.describe.helpers.animations import describe_actions
     from exporter.phases.describe.helpers.constraints import describe_constraints
@@ -74,6 +80,7 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
         [obj for obj in context.scene.objects if obj.type == 'MESH']
         if not armatures else []
     )
+    static_hierarchy_objects = []
     if not armatures:
         if output_ext == 'pkx':
             raise ValueError(
@@ -84,7 +91,10 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
             raise ValueError(
                 "No armatures or mesh objects in the scene. Nothing can be exported."
             )
-        _validate_armatureless_static_meshes(static_mesh_objects)
+        static_hierarchy_objects = _collect_static_hierarchy_objects(
+            static_mesh_objects)
+        _validate_armatureless_static_meshes(
+            static_mesh_objects, static_hierarchy_objects)
 
     # Note: baked-transforms validation lives in pre_process (user-facing,
     # runs before the pipeline starts) and in plan (BR-side defense-in-depth).
@@ -104,7 +114,10 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
             br_models.append(br_model)
     else:
         br_models.append(
-            _describe_static_model(static_mesh_objects, logger, image_cache)
+            _describe_static_model(
+                static_mesh_objects, logger, image_cache,
+                hierarchy_objects=static_hierarchy_objects,
+            )
         )
 
     # In multi-armature scenes actions attach only when bound to an armature
@@ -153,27 +166,66 @@ def describe_scene(context, options=None, logger=StubLogger(), output_ext=''):
     return br_scene, shiny_params, pkx_header
 
 
-def _validate_armatureless_static_meshes(mesh_objects):
-    """Reject Blender states that cannot be represented by one static JOBJ."""
+def _collect_static_hierarchy_objects(mesh_objects):
+    """Collect MESH/EMPTY nodes needed to preserve explicit mesh parenting.
+
+    With no MESH/EMPTY parent relation the exporter stays in flat mode. When
+    such parenting exists, every mesh plus its MESH/EMPTY ancestors becomes a
+    JOBJ in the static hierarchy.
+    """
+    found_parent_link = False
+    by_id = {id(obj): obj for obj in mesh_objects}
+    for mesh in mesh_objects:
+        parent = getattr(mesh, "parent", None)
+        while parent is not None and getattr(parent, "type", None) in ("MESH", "EMPTY"):
+            found_parent_link = True
+            by_id[id(parent)] = parent
+            parent = getattr(parent, "parent", None)
+    return list(by_id.values()) if found_parent_link else []
+
+
+def _animation_data_active(anim):
+    if anim is None:
+        return False
+    if getattr(anim, "action", None) is not None:
+        return True
+    if getattr(anim, "drivers", None):
+        return True
+    return any(
+        getattr(track, "strips", None)
+        for track in (getattr(anim, "nla_tracks", None) or ())
+    )
+
+
+def _validate_armatureless_static_meshes(mesh_objects, hierarchy_objects=None):
+    """Reject states that cannot be represented by a static JOBJ hierarchy."""
     animated = []
+    material_animated = []
     armature_modified = []
     shape_keyed = []
-    for obj in mesh_objects:
-        anim = getattr(obj, 'animation_data', None)
-        if anim is not None:
-            if getattr(anim, 'action', None) is not None:
-                animated.append(obj.name)
-            elif any(getattr(track, 'strips', None) for track in
-                     (getattr(anim, 'nla_tracks', None) or ())):
-                animated.append(obj.name)
-            elif getattr(anim, 'drivers', None):
-                animated.append(obj.name)
 
+    hierarchy_objects = list(hierarchy_objects or [])
+    objects_to_check = {}
+    for obj in list(mesh_objects) + hierarchy_objects:
+        objects_to_check[id(obj)] = obj
+
+    for obj in objects_to_check.values():
+        if _animation_data_active(getattr(obj, 'animation_data', None)):
+            animated.append(obj.name)
+
+    for obj in mesh_objects:
         data = getattr(obj, 'data', None)
         shape_keys = getattr(data, 'shape_keys', None) if data is not None else None
         key_blocks = getattr(shape_keys, 'key_blocks', None) if shape_keys is not None else None
         if key_blocks is not None and len(key_blocks) > 1:
             shape_keyed.append(obj.name)
+
+        for material in (
+                (getattr(data, 'materials', None) or ())
+                if data is not None else ()):
+            if material is not None and _animation_data_active(
+                    getattr(material, 'animation_data', None)):
+                material_animated.append(getattr(material, 'name', obj.name))
 
         for modifier in getattr(obj, 'modifiers', ()) or ():
             if getattr(modifier, 'type', None) == 'ARMATURE':
@@ -184,6 +236,11 @@ def _validate_armatureless_static_meshes(mesh_objects):
         raise ValueError(
             "Armatureless DAT export is static-only. Object animation or "
             "drivers found on: " + ", ".join(sorted(set(animated)))
+        )
+    if material_animated:
+        raise ValueError(
+            "Armatureless DAT export is static-only. Material animation or "
+            "drivers found on: " + ", ".join(sorted(set(material_animated)))
         )
     if shape_keyed:
         raise ValueError(
@@ -198,13 +255,30 @@ def _validate_armatureless_static_meshes(mesh_objects):
         )
 
 
-def _describe_static_model(mesh_objects, logger, image_cache=None):
-    """Describe a no-armature Blender scene as one rigid HSD model."""
+def _describe_static_model(mesh_objects, logger, image_cache=None,
+                           hierarchy_objects=None):
+    """Describe a no-armature Blender scene as a rigid HSD model."""
     model_name = mesh_objects[0].name if len(mesh_objects) == 1 else "StaticModel"
-    br_armature = make_static_root_armature(model_name + "_HSDRoot")
+    hierarchy_objects = list(hierarchy_objects or [])
+
+    if hierarchy_objects:
+        br_armature, owner_names = make_static_hierarchy_armature(
+            hierarchy_objects, model_name + "_HSDHierarchy")
+        fallback_root = br_armature.bones[0].name
+        bone_names = {bone.name for bone in br_armature.bones}
+    else:
+        br_armature = make_static_root_armature(model_name + "_HSDRoot")
+        owner_names = {}
+        fallback_root = "Root"
+        bone_names = {"Root"}
+
     br_meshes, _instances, br_materials, _blender_materials = (
         describe_static_meshes(
-            mesh_objects, root_bone_name="Root", logger=logger,
+            mesh_objects,
+            root_bone_name=fallback_root,
+            mesh_owner_names=owner_names,
+            bone_names=bone_names,
+            logger=logger,
             image_cache=image_cache,
         )
     )
