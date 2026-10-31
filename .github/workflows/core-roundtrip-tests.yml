@@ -31,6 +31,7 @@ jobs:
           tests/test_merge_meshes.py
           tests/test_plan_meshes.py
           tests/test_chibi_robo_roundtrip_metadata.py
+          tests/test_chibi_robo_vertex_formats.py
           tests/test_chibi_robo_nrm_clr0.py
           tests/test_describe_normals_export.py
           tests/test_build_mesh_instances.py

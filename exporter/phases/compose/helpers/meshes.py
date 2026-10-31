@@ -13,7 +13,7 @@ try:
     from .....shared.Nodes.Classes.Mesh.Vertex import Vertex
     from .....shared.Nodes.Classes.Joints.Envelope import EnvelopeList, Envelope
     from .....shared.Constants.gx import (
-        GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_CLR1,
+        GX_VA_POS, GX_VA_NRM, GX_VA_NBT, GX_VA_CLR0, GX_VA_CLR1,
         GX_VA_TEX0, GX_VA_PNMTXIDX,
         GX_INDEX8, GX_INDEX16, GX_DIRECT,
         GX_U8, GX_S8, GX_U16, GX_S16, GX_F32, GX_RGBA8,
@@ -24,7 +24,7 @@ try:
         POBJ_CULLFRONT, POBJ_CULLBACK, POBJ_SKIN, POBJ_ENVELOPE,
         JOBJ_HIDDEN, JOBJ_SKELETON, JOBJ_SKELETON_ROOT,
     )
-    from .....shared.IR.enums import SkinType
+    from .....shared.IR.enums import SkinType, LightingModel, CoordType
     from .....shared.helpers.binary import pack, pack_many
     from .....shared.helpers.math_shim import Matrix, Vector
     from .....shared.helpers.logger import StubLogger
@@ -37,7 +37,7 @@ except (ImportError, SystemError):
     from shared.Nodes.Classes.Mesh.Vertex import Vertex
     from shared.Nodes.Classes.Joints.Envelope import EnvelopeList, Envelope
     from shared.Constants.gx import (
-        GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_CLR1,
+        GX_VA_POS, GX_VA_NRM, GX_VA_NBT, GX_VA_CLR0, GX_VA_CLR1,
         GX_VA_TEX0, GX_VA_PNMTXIDX,
         GX_INDEX8, GX_INDEX16, GX_DIRECT,
         GX_U8, GX_S8, GX_U16, GX_S16, GX_F32, GX_RGBA8,
@@ -48,7 +48,7 @@ except (ImportError, SystemError):
         POBJ_CULLFRONT, POBJ_CULLBACK, POBJ_SKIN, POBJ_ENVELOPE,
         JOBJ_HIDDEN, JOBJ_SKELETON, JOBJ_SKELETON_ROOT,
     )
-    from shared.IR.enums import SkinType
+    from shared.IR.enums import SkinType, LightingModel, CoordType
     from shared.helpers.binary import pack, pack_many
     from shared.helpers.math_shim import Matrix, Vector
     from shared.helpers.logger import StubLogger
@@ -354,7 +354,7 @@ def _build_pobj(ir_mesh, joints, bones, bone_name_to_index, logger):
     # Normals — per-loop, need to de-duplicate into indexed buffer. Preserve
     # Chibi-Robo's compact S8 fixed-point normals when possible; this matters
     # for both file size and reflection-coordinate generation.
-    if export_normals:
+    if export_normals and _should_export_normal_attribute(ir_mesh):
         nrm_fmt = _source_vertex_format(ir_mesh, GX_VA_NRM)
         nrm_encoded = _encode_indexed_source_numeric(
             export_normals, nrm_fmt, expected_components=3)
@@ -909,6 +909,49 @@ def _source_vertex_format(ir_mesh, attribute):
         except (TypeError, ValueError, AttributeError):
             continue
     return None
+
+
+def _material_requires_normals(ir_material):
+    """Return True when the reconstructed HSD material needs a normal stream."""
+    if ir_material is None:
+        return False
+    if getattr(ir_material, 'lighting', None) == LightingModel.LIT:
+        return True
+    if bool(getattr(ir_material, 'enable_specular', False)):
+        return True
+    for layer in getattr(ir_material, 'texture_layers', None) or []:
+        if getattr(layer, 'coord_type', None) == CoordType.REFLECTION:
+            return True
+        if bool(getattr(layer, 'is_bump', False)):
+            return True
+    return False
+
+
+def _should_export_normal_attribute(ir_mesh):
+    """Decide whether Blender's display normals should become GX_VA_NRM.
+
+    Blender always computes normals, even for source HSD PObjects that had no
+    normal descriptor. When source vertex-format metadata is present, absence
+    of NRM/NBT is meaningful: preserve that omission unless the edited
+    material now needs normals for lighting, specular, reflection, or bump.
+    Newly-authored meshes have no source descriptor metadata, so their Blender
+    normals continue to export normally.
+    """
+    formats = getattr(ir_mesh, 'source_vertex_formats', None) or []
+    if not formats:
+        return True
+
+    attrs = set()
+    for fmt in formats:
+        try:
+            attrs.add(int(fmt.get('attribute')))
+        except (TypeError, ValueError, AttributeError):
+            continue
+
+    if GX_VA_NRM in attrs or GX_VA_NBT in attrs:
+        return True
+
+    return _material_requires_normals(getattr(ir_mesh, 'material', None))
 
 
 def _numeric_format_info(fmt, expected_components):

@@ -3,13 +3,16 @@
 from types import SimpleNamespace
 
 from shared.Constants.gx import (
-    GX_VA_POS, GX_VA_NRM, GX_INDEX8, GX_INDEX16,
+    GX_VA_POS, GX_VA_NRM, GX_VA_CLR0, GX_VA_TEX0,
+    GX_INDEX8, GX_INDEX16,
     GX_S8, GX_S16, GX_POS_XYZ, GX_NRM_XYZ,
 )
+from shared.IR.enums import LightingModel, CoordType
 from exporter.phases.compose.helpers.meshes import (
     _encode_source_numeric_buffer,
     _encode_indexed_source_numeric,
     _make_vertex_desc_from_source,
+    _should_export_normal_attribute,
 )
 
 
@@ -66,3 +69,67 @@ def test_source_fixed_point_falls_back_if_edited_value_overflows():
     fmt = _fmt(GX_VA_NRM, GX_INDEX16, GX_NRM_XYZ, GX_S8, 6, 3)
     # 3.0 * 64 = 192, outside signed 8-bit.
     assert _encode_source_numeric_buffer([(3.0, 0.0, 0.0)], fmt, 3) is None
+
+
+
+def _source_fmt(attribute):
+    return {
+        "attribute": attribute,
+        "attribute_type": GX_INDEX16,
+        "component_count": 0,
+        "component_type": GX_S16,
+        "component_frac": 0,
+        "stride": 4,
+    }
+
+
+def _material(*, lit=False, specular=False, reflection=False, bump=False):
+    layers = []
+    if reflection or bump:
+        layers.append(SimpleNamespace(
+            coord_type=CoordType.REFLECTION if reflection else CoordType.UV,
+            is_bump=bump,
+        ))
+    return SimpleNamespace(
+        lighting=LightingModel.LIT if lit else LightingModel.UNLIT,
+        enable_specular=specular,
+        texture_layers=layers,
+    )
+
+
+def test_source_mesh_without_normal_descriptor_keeps_normals_omitted():
+    mesh = SimpleNamespace(
+        source_vertex_formats=[
+            _source_fmt(GX_VA_POS),
+            _source_fmt(GX_VA_CLR0),
+            _source_fmt(GX_VA_TEX0),
+        ],
+        material=_material(),
+    )
+    assert _should_export_normal_attribute(mesh) is False
+
+
+def test_source_mesh_without_normals_adds_them_if_material_now_needs_them():
+    for mat in (
+        _material(lit=True),
+        _material(specular=True),
+        _material(reflection=True),
+        _material(bump=True),
+    ):
+        mesh = SimpleNamespace(
+            source_vertex_formats=[
+                _source_fmt(GX_VA_POS),
+                _source_fmt(GX_VA_CLR0),
+                _source_fmt(GX_VA_TEX0),
+            ],
+            material=mat,
+        )
+        assert _should_export_normal_attribute(mesh) is True
+
+
+def test_new_mesh_without_source_formats_exports_blender_normals():
+    mesh = SimpleNamespace(
+        source_vertex_formats=[],
+        material=_material(),
+    )
+    assert _should_export_normal_attribute(mesh) is True
