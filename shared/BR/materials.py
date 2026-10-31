@@ -90,6 +90,10 @@ class BRMaterial:
     # a white helper RGB node), so imported materials carry this hint.
     source_color_source: str | None = None
     source_alpha_source: str | None = None
+    # Original HSD Material.diffuse value. For VERTEX-only routing this
+    # field is not represented by an editable Blender color node, but it is
+    # still real source data and must survive a pristine round trip.
+    source_diffuse_color: tuple[float, float, float, float] | None = None
     # Imported HSD MObj depth-write state. Build stores this as Blender
     # metadata so editing geometry/materials does not silently erase it.
     source_no_depth_update: bool = False

@@ -9,6 +9,7 @@ from exporter.phases.compose.helpers.materials import compose_material
 from shared.Constants.hsd import (
     RENDER_DIFFUSE,
     RENDER_DIFFUSE_MAT,
+    RENDER_DIFFUSE_VTX,
     RENDER_ALPHA_MAT,
     RENDER_NO_ZUPDATE,
     RENDER_XLU,
@@ -77,3 +78,41 @@ def test_translucency_does_not_imply_no_zupdate():
 
     assert rebuilt.render_mode & RENDER_XLU
     assert not (rebuilt.render_mode & RENDER_NO_ZUPDATE)
+
+
+def test_vertex_only_source_diffuse_survives_pristine_round_trip():
+    """Inactive Material.diffuse bytes are still source data.
+
+    Chibi-Robo uses many VERTEX-only materials. Blender has no editable
+    diffuse-color node for the unlit form, so a pristine round trip must
+    restore the original Material.diffuse field from source metadata.
+    """
+    mobj = _mobj(RENDER_DIFFUSE_VTX | RENDER_ALPHA_MAT)
+    mobj.material.diffuse = _Color((89, 255, 47, 255))
+
+    source_ir = describe_material(mobj)
+    assert source_ir.color_source.value == "VERTEX"
+
+    br = import_plan_material(source_ir, name="VertexDiffuse")
+    assert br.source_diffuse_color == source_ir.diffuse_color
+
+    # The real Blender describe phase sets this only when the imported graph
+    # fingerprint still matches. Mark the pure BR fixture equivalently.
+    br.source_routing_pristine = True
+    rebuilt_ir = export_plan_material(br)
+
+    for actual, expected in zip(rebuilt_ir.diffuse_color, source_ir.diffuse_color):
+        assert abs(actual - expected) < 1e-9
+
+
+def test_vertex_only_source_diffuse_is_not_forced_after_routing_edit():
+    """Once routing is edited, stale source metadata must stop overriding it."""
+    mobj = _mobj(RENDER_DIFFUSE_VTX | RENDER_ALPHA_MAT)
+    mobj.material.diffuse = _Color((89, 255, 47, 255))
+
+    source_ir = describe_material(mobj)
+    br = import_plan_material(source_ir, name="EditedVertexDiffuse")
+    br.source_routing_pristine = False
+
+    rebuilt_ir = export_plan_material(br)
+    assert rebuilt_ir.diffuse_color != source_ir.diffuse_color

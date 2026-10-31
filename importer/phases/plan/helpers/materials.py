@@ -311,6 +311,7 @@ def plan_material(ir_material, name, has_color_animation=False,
         dedup_key=dedup_key,
         source_color_source=ir_material.color_source.value,
         source_alpha_source=ir_material.alpha_source.value,
+        source_diffuse_color=tuple(ir_material.diffuse_color),
         source_no_depth_update=bool(
             getattr(ir_material, 'no_depth_update', False)),
     )

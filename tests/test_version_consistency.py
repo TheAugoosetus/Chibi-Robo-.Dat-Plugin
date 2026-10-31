@@ -27,7 +27,7 @@ def _manifest_version():
 
 
 def test_plugin_version_declarations_match():
-    assert PLUGIN_VERSION == "3.1.9"
-    assert PLUGIN_VERSION_TUPLE == (3, 1, 9)
+    assert PLUGIN_VERSION == "3.1.10"
+    assert PLUGIN_VERSION_TUPLE == (3, 1, 10)
     assert _bl_info_version() == PLUGIN_VERSION_TUPLE
     assert _manifest_version() == PLUGIN_VERSION

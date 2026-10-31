@@ -72,10 +72,33 @@ def plan_material(br_material, logger=StubLogger(), image_cache=None,
 
     lighting = _classify_lighting(principled, emission)
 
-    diffuse_color = _extract_rgb_node_color(view, 'diffuse') or (0.7, 0.7, 0.7, 1.0)
-    if principled is not None and diffuse_color == (0.7, 0.7, 0.7, 1.0):
-        base_color = principled.input_defaults.get('Base Color', (0.0, 0.0, 0.0, 1.0))
-        diffuse_color = _linear_to_srgb_rgba(base_color)
+    routing_pristine = bool(
+        getattr(br_material, 'source_routing_pristine', False))
+    source_color_source = (
+        getattr(br_material, 'source_color_source', None)
+        if routing_pristine else None
+    )
+    source_diffuse_color = (
+        getattr(br_material, 'source_diffuse_color', None)
+        if routing_pristine else None
+    )
+
+    # VERTEX-only HSD routing does not use Material.diffuse for rendering,
+    # so the importer intentionally has no editable Blender color carrying
+    # that value (or a neutral white helper in the lit case). Preserve the
+    # original field while the imported routing graph remains pristine.
+    if (source_color_source == ColorSource.VERTEX.value
+            and source_diffuse_color is not None):
+        diffuse_color = tuple(source_diffuse_color)
+    else:
+        diffuse_color = _extract_rgb_node_color(view, 'diffuse')
+        if diffuse_color is None:
+            if lighting == LightingModel.LIT and principled is not None:
+                base_color = principled.input_defaults.get(
+                    'Base Color', (0.7, 0.7, 0.7, 1.0))
+                diffuse_color = _linear_to_srgb_rgba(base_color)
+            else:
+                diffuse_color = (0.7, 0.7, 0.7, 1.0)
 
     ambient_color = _extract_ambient(view)
 
@@ -87,8 +110,6 @@ def plan_material(br_material, logger=StubLogger(), image_cache=None,
 
     shininess, enable_specular = _extract_specular_settings(principled)
 
-    routing_pristine = bool(
-        getattr(br_material, 'source_routing_pristine', False))
     color_source, alpha_source = _detect_color_sources(
         view,
         source_color_source=(

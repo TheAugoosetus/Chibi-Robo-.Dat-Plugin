@@ -41,6 +41,18 @@ _NODE_PROPERTY_KEYS = {
 }
 
 
+def _read_float4_property(owner, key):
+    """Read a Blender custom property as a normalized 4-float tuple."""
+    value = owner.get(key)
+    if value is None:
+        return None
+    try:
+        result = tuple(float(component) for component in value)
+    except (TypeError, ValueError):
+        return None
+    return result if len(result) == 4 else None
+
+
 def describe_material(blender_mat, logger=StubLogger(),
                       cache=None, image_cache=None):
     """Read one Blender material into a BRMaterial.
@@ -72,6 +84,8 @@ def describe_material(blender_mat, logger=StubLogger(),
         dedup_key=(id(blender_mat),),
         source_color_source=blender_mat.get("dat_hsd_color_source"),
         source_alpha_source=blender_mat.get("dat_hsd_alpha_source"),
+        source_diffuse_color=_read_float4_property(
+            blender_mat, "dat_hsd_source_diffuse_color"),
         source_no_depth_update=bool(
             blender_mat.get("dat_hsd_no_zupdate", False)),
         source_routing_pristine=(
