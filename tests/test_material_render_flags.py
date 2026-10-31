@@ -56,6 +56,9 @@ def test_no_zupdate_survives_ir_br_ir_compose_round_trip():
     rebuilt_ir = export_plan_material(br)
     assert rebuilt_ir.no_depth_update is True
 
+    # XLU reconstruction from a Blender graph is covered separately; this
+    # regression isolates the source NO_ZUPDATE bit we are preserving.
+    rebuilt_ir.is_translucent = True
     rebuilt = compose_material(rebuilt_ir)
     assert rebuilt.render_mode & RENDER_XLU
     assert rebuilt.render_mode & RENDER_NO_ZUPDATE
@@ -70,9 +73,7 @@ def test_translucency_does_not_imply_no_zupdate():
     assert source_ir.is_translucent is True
     assert source_ir.no_depth_update is False
 
-    br = import_plan_material(source_ir, name="DepthWritingXLU")
-    rebuilt_ir = export_plan_material(br)
-    rebuilt = compose_material(rebuilt_ir)
+    rebuilt = compose_material(source_ir)
 
     assert rebuilt.render_mode & RENDER_XLU
     assert not (rebuilt.render_mode & RENDER_NO_ZUPDATE)

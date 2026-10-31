@@ -79,7 +79,7 @@ except (ImportError, SystemError):
     )
     from shared.Nodes.Classes.Colors.RGBAColor import RGBAColor, RGBX8Color
     from shared.Constants.hsd import (
-        RENDER_DIFFUSE, RENDER_SPECULAR, RENDER_XLU,
+        RENDER_DIFFUSE, RENDER_SPECULAR, RENDER_XLU, RENDER_NO_ZUPDATE,
         RENDER_DIFFUSE_MAT, RENDER_DIFFUSE_VTX, RENDER_DIFFUSE_BOTH,
         RENDER_ALPHA_MAT, RENDER_ALPHA_VTX, RENDER_ALPHA_BOTH,
         RENDER_TEX0,
