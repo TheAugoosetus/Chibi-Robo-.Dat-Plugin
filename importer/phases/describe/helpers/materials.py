@@ -109,6 +109,7 @@ def describe_material(mobj, image_cache=None, logger=None, options=None):
         lighting=lighting,
         enable_specular=enable_specular,
         is_translucent=is_translucent,
+        no_depth_update=bool(render_mode & RENDER_NO_ZUPDATE),
         texture_layers=texture_layers,
         fragment_blending=fragment_blending,
     )

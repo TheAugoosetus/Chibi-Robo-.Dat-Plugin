@@ -117,6 +117,8 @@ def plan_material(br_material, logger=StubLogger(), image_cache=None,
         lighting=lighting,
         enable_specular=enable_specular,
         is_translucent=is_translucent,
+        no_depth_update=bool(
+            getattr(br_material, 'source_no_depth_update', False)),
         texture_layers=texture_layers,
     )
 

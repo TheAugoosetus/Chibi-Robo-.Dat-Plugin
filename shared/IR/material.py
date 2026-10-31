@@ -22,6 +22,10 @@ class IRMaterial:
     lighting: LightingModel
     enable_specular: bool
     is_translucent: bool
+    # HSD RENDER_NO_ZUPDATE: draw without writing depth. This is independent
+    # of translucency; stock Chibi-Robo contains XLU materials both with and
+    # without this bit.
+    no_depth_update: bool = False
     texture_layers: list[IRTextureLayer] = field(default_factory=list)
     fragment_blending: FragmentBlending | None = None
 

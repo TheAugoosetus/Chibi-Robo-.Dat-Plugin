@@ -90,4 +90,7 @@ class BRMaterial:
     # a white helper RGB node), so imported materials carry this hint.
     source_color_source: str | None = None
     source_alpha_source: str | None = None
+    # Imported HSD MObj depth-write state. Build stores this as Blender
+    # metadata so editing geometry/materials does not silently erase it.
+    source_no_depth_update: bool = False
     source_routing_pristine: bool = False

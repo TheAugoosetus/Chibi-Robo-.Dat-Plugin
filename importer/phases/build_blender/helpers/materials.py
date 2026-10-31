@@ -31,6 +31,8 @@ def build_material(br_material, image_cache=None):
         mat["dat_hsd_color_source"] = br_material.source_color_source
     if br_material.source_alpha_source is not None:
         mat["dat_hsd_alpha_source"] = br_material.source_alpha_source
+    if getattr(br_material, "source_no_depth_update", False):
+        mat["dat_hsd_no_zupdate"] = True
     if br_material.use_backface_culling:
         mat.use_backface_culling = True
     if br_material.blend_method is not None:

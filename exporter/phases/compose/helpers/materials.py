@@ -18,7 +18,7 @@ try:
     )
     from .....shared.Nodes.Classes.Colors.RGBAColor import RGBAColor, RGBX8Color
     from .....shared.Constants.hsd import (
-        RENDER_DIFFUSE, RENDER_SPECULAR, RENDER_XLU,
+        RENDER_DIFFUSE, RENDER_SPECULAR, RENDER_XLU, RENDER_NO_ZUPDATE,
         RENDER_DIFFUSE_MAT, RENDER_DIFFUSE_VTX, RENDER_DIFFUSE_BOTH,
         RENDER_ALPHA_MAT, RENDER_ALPHA_VTX, RENDER_ALPHA_BOTH,
         RENDER_TEX0,
@@ -212,6 +212,10 @@ def _build_render_mode(ir_mat):
         mode |= RENDER_ALPHA_BOTH
     else:
         mode |= RENDER_ALPHA_MAT
+
+    # Depth-write suppression (bit 29). This is independent of translucency.
+    if getattr(ir_mat, 'no_depth_update', False):
+        mode |= RENDER_NO_ZUPDATE
 
     # Translucency (bit 30)
     if ir_mat.is_translucent:

@@ -72,6 +72,8 @@ def describe_material(blender_mat, logger=StubLogger(),
         dedup_key=(id(blender_mat),),
         source_color_source=blender_mat.get("dat_hsd_color_source"),
         source_alpha_source=blender_mat.get("dat_hsd_alpha_source"),
+        source_no_depth_update=bool(
+            blender_mat.get("dat_hsd_no_zupdate", False)),
         source_routing_pristine=(
             isinstance(blender_mat.get("dat_hsd_source_routing_fingerprint"), str)
             and blender_mat.get("dat_hsd_source_routing_fingerprint")
