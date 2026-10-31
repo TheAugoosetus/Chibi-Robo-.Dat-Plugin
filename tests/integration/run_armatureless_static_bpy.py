@@ -80,7 +80,7 @@ def main():
         )
         scene_section = next(
             section for section in sections
-            if getattr(section, "name", None) == "scene_data"
+            if getattr(section, "section_name", None) == "scene_data"
         )
         scene = scene_section.root_node
         assert len(scene.models) == 1
